@@ -1,0 +1,5 @@
+{
+  "name": "TikTok Video Management Dashboard",
+  "description": "An application to manage and track TikTok video uploads. Users can input video details, including TikTok ID, video ID, categories, and upload date. The app provides a summary of video counts per TikTok account.",
+  "requestFramePermissions": []
+}
