@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ref, uploadBytes } from 'firebase/storage';
 import { storage } from '../firebase';
-import { VideoRecord, Brand, AppUser } from '../types';
+import { VideoRecord, AppUser } from '../types';
 import Modal from './Modal';
 import { ArrowUpIcon } from './icons/ArrowUpIcon';
 import { ArrowDownIcon } from './icons/ArrowDownIcon';
@@ -13,7 +13,6 @@ import { EyeIcon } from './icons/EyeIcon';
 
 interface VideoDataTableProps {
   videos: VideoRecord[];
-  brands: Brand[];
   onUpdateVideo: (video: VideoRecord) => void;
   appUser: AppUser;
   onDeleteVideos: (ids: string[]) => void;
@@ -26,13 +25,12 @@ type SortKey = keyof Omit<VideoRecord, 'notes'>;
 const COLUMNS = [
     { id: 'tiktokId', name: 'TikTok ID' },
     { id: 'videoId', name: 'Video ID' },
-    { id: 'brand', name: 'Brand' },
     { id: 'uploadDate', name: 'Upload Date' },
     { id: 'videoFile', name: 'Video File' },
     { id: 'notes', name: 'Notes' },
 ];
 
-const SORTABLE_KEYS: SortKey[] = ['tiktokId', 'videoId', 'brand', 'uploadDate'];
+const SORTABLE_KEYS: SortKey[] = ['tiktokId', 'videoId', 'uploadDate'];
 
 
 // --- Helper Components ---
@@ -60,12 +58,11 @@ const EditableNotesCell: React.FC<{ video: VideoRecord; onUpdate: (video: VideoR
 
 // --- Main Component ---
 
-const VideoDataTable: React.FC<VideoDataTableProps> = ({ videos, brands, onUpdateVideo, appUser, onDeleteVideos, onViewFile }) => {
+const VideoDataTable: React.FC<VideoDataTableProps> = ({ videos, onUpdateVideo, appUser, onDeleteVideos, onViewFile }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(null);
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set(COLUMNS.map(c => c.id)));
   const [isColsDropdownOpen, setIsColsDropdownOpen] = useState(false);
-  const [brandFilter, setBrandFilter] = useState<Brand | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null); // Track by video ID
@@ -73,9 +70,7 @@ const VideoDataTable: React.FC<VideoDataTableProps> = ({ videos, brands, onUpdat
   const filteredAndSortedVideos = useMemo(() => {
     let filteredVideos = [...videos];
 
-    if (brandFilter !== 'all') {
-      filteredVideos = filteredVideos.filter(v => v.brand === brandFilter);
-    }
+    // Brand filter removed as per instruction
     
     if (searchTerm.trim() !== '') {
         const lowercasedSearchTerm = searchTerm.toLowerCase();
@@ -97,7 +92,7 @@ const VideoDataTable: React.FC<VideoDataTableProps> = ({ videos, brands, onUpdat
       });
     }
     return filteredVideos;
-  }, [videos, sortConfig, brandFilter, searchTerm]);
+  }, [videos, sortConfig, searchTerm]);
 
   const requestSort = (key: SortKey) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -211,16 +206,7 @@ const VideoDataTable: React.FC<VideoDataTableProps> = ({ videos, brands, onUpdat
                     className="bg-gray-700 border-gray-600 rounded-md pl-9 pr-2 py-1.5 text-sm text-white focus:ring-1 focus:ring-cyan-500"
                 />
             </div>
-           <select 
-                value={brandFilter}
-                onChange={(e) => setBrandFilter(e.target.value as Brand | 'all')}
-                className="bg-gray-700 border-gray-600 rounded-md px-2 py-1.5 text-sm text-white focus:ring-1 focus:ring-cyan-500"
-            >
-                <option value="all">All Brands</option>
-                {brands.map(b => (
-                    <option key={b} value={b}>{b.toUpperCase()}</option>
-                ))}
-            </select>
+           
             <ColumnManager />
         </div>
       </div>
@@ -253,11 +239,7 @@ const VideoDataTable: React.FC<VideoDataTableProps> = ({ videos, brands, onUpdat
                   </td>
                   {visibleColumns.has('tiktokId') && <td className="px-6 py-2 font-medium text-white whitespace-nowrap">{video.tiktokId}</td>}
                   {visibleColumns.has('videoId') && <td className="px-6 py-2">{video.videoId}</td>}
-                  {visibleColumns.has('brand') && <td className="px-6 py-2">
-                      <span className={`px-2.5 py-1 text-xs font-bold rounded-full bg-gray-600 text-gray-200`}>
-                          {video.brand.toUpperCase()}
-                      </span>
-                  </td>}
+                  
                   {visibleColumns.has('uploadDate') && <td className="px-6 py-2 whitespace-nowrap">{video.uploadDate}</td>}
                   {visibleColumns.has('videoFile') && <td className="px-6 py-2">
                     {uploading === video.id ? (

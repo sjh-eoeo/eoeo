@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ref, uploadBytes } from 'firebase/storage';
 import { storage } from '../firebase';
-import { Profile, VideoRecord, Payment, Brand } from '../types';
+import { Profile, VideoRecord, Payment, Brand, PaymentCycle } from '../types';
 import Modal from './Modal';
 import { DollarIcon } from './icons/DollarIcon';
 import { PlusIcon } from './icons/PlusIcon';
@@ -76,25 +76,30 @@ interface PaymentStatusTableProps {
   profiles: Profile[];
   videos: VideoRecord[];
   payments: Payment[];
-  brands: Brand[];
+  selectedBrand: Brand | null;
   onUpdateProfile: (profile: Profile) => void;
   onAddPayment: (payment: Omit<Payment, 'id'>) => void;
 }
 
 const getNextPaymentDate = (profile: Profile, lastPayment: Payment | null, paymentCount: number): Date | null => {
-    if (paymentCount >= 8) return null;
+    if (paymentCount >= profile.numberOfPayments) return null;
 
     const baseDate = lastPayment ? new Date(lastPayment.paymentDate) : new Date(profile.startDate);
+    let cycleDays = 7;
+    switch (profile.paymentCycle) {
+        case 'weekly': cycleDays = 7; break;
+        case 'bi-weekly': cycleDays = 14; break;
+        case 'monthly': cycleDays = 30; break;
+    }
     
-    const dueDate = new Date(baseDate.getTime() + 6 * 24 * 60 * 60 * 1000);
+    const dueDate = new Date(baseDate.getTime() + cycleDays * 24 * 60 * 60 * 1000);
     return dueDate;
 };
   
 
-const PaymentStatusTable: React.FC<PaymentStatusTableProps> = ({ profiles, videos, payments, brands, onUpdateProfile, onAddPayment }) => {
+const PaymentStatusTable: React.FC<PaymentStatusTableProps> = ({ profiles, videos, payments, selectedBrand, onUpdateProfile, onAddPayment }) => {
   const [editingInfo, setEditingInfo] = useState<{ tiktokId: string; value: string } | null>(null);
   const [saveInfoConfirm, setSaveInfoConfirm] = useState<(() => void) | null>(null);
-  const [activeBrand, setActiveBrand] = useState<Brand | null>(null);
   const [addPaymentModalProfileId, setAddPaymentModalProfileId] = useState<string | null>(null);
   const [pendingPayment, setPendingPayment] = useState<Omit<Payment, 'id'> | null>(null);
   const [dueSortConfig, setDueSortConfig] = useState<{ key: 'nextPaymentDate' | 'tiktokId', direction: 'asc' | 'desc' }>({ key: 'nextPaymentDate', direction: 'asc' });
@@ -102,30 +107,14 @@ const PaymentStatusTable: React.FC<PaymentStatusTableProps> = ({ profiles, video
   const [overviewSearchTerm, setOverviewSearchTerm] = useState('');
   const [isUploading, setIsUploading] = useState(false);
 
-
-  useEffect(() => {
-    if (!activeBrand && brands.length > 0) {
-      setActiveBrand(brands[0]);
-    } else if (brands.length > 0 && activeBrand && !brands.includes(activeBrand)) {
-      setActiveBrand(brands[0]);
-    } else if (brands.length === 0) {
-      setActiveBrand(null);
-    }
-  }, [brands, activeBrand]);
-
   const profileForPaymentModal = useMemo(() => {
     return addPaymentModalProfileId ? profiles.find(p => p.tiktokId === addPaymentModalProfileId) : null;
   }, [addPaymentModalProfileId, profiles]);
 
-
-  const videoCountsByProfileAndBrand = useMemo(() => {
-    const counts = new Map<string, Map<Brand, number>>();
+  const videoCountsByProfile = useMemo(() => {
+    const counts = new Map<string, number>();
     videos.forEach(video => {
-        if (!counts.has(video.tiktokId)) {
-            counts.set(video.tiktokId, new Map<Brand, number>());
-        }
-        const brandCounts = counts.get(video.tiktokId)!;
-        brandCounts.set(video.brand, (brandCounts.get(video.brand) || 0) + 1);
+        counts.set(video.tiktokId, (counts.get(video.tiktokId) || 0) + 1);
     });
     return counts;
   }, [videos]);
@@ -140,8 +129,6 @@ const PaymentStatusTable: React.FC<PaymentStatusTableProps> = ({ profiles, video
   }, [payments]);
 
   const dueProfiles = useMemo(() => {
-    if (!activeBrand) return [];
-    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -149,6 +136,8 @@ const PaymentStatusTable: React.FC<PaymentStatusTableProps> = ({ profiles, video
         .map(profile => {
             const profilePayments = paymentsByProfile.get(profile.tiktokId) || [];
             const paymentCount = profilePayments.length;
+            if (paymentCount >= profile.numberOfPayments) return null;
+
             const lastPayment = paymentCount > 0
                 ? [...profilePayments].sort((a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime())[0]
                 : null;
@@ -159,9 +148,10 @@ const PaymentStatusTable: React.FC<PaymentStatusTableProps> = ({ profiles, video
                 isDueByDate = true;
             }
 
-            const requiredVideos = (paymentCount + 1) * 12;
-            const brandVideoCount = videoCountsByProfileAndBrand.get(profile.tiktokId)?.get(activeBrand) || 0;
-            const hasEnoughVideos = brandVideoCount >= requiredVideos;
+            const videosPerPayment = profile.totalVideoCount / profile.numberOfPayments;
+            const requiredVideos = (paymentCount + 1) * videosPerPayment;
+            const currentVideoCount = videoCountsByProfile.get(profile.tiktokId) || 0;
+            const hasEnoughVideos = currentVideoCount >= requiredVideos;
             
             const isDue = isDueByDate && hasEnoughVideos;
             
@@ -169,9 +159,10 @@ const PaymentStatusTable: React.FC<PaymentStatusTableProps> = ({ profiles, video
                 profile,
                 isDue,
                 nextPaymentDate,
+                amountDue: profile.contractAmount / profile.numberOfPayments
             };
         })
-        .filter(p => p.isDue);
+        .filter((p): p is NonNullable<typeof p> => p !== null && p.isDue);
 
     if (dueSearchTerm.trim() !== '') {
         dueProfilesData = dueProfilesData.filter(p =>
@@ -179,22 +170,22 @@ const PaymentStatusTable: React.FC<PaymentStatusTableProps> = ({ profiles, video
         );
     }
     
-    return dueProfilesData.map(p => ({ ...p.profile, nextPaymentDate: p.nextPaymentDate }));
-  }, [profiles, paymentsByProfile, videoCountsByProfileAndBrand, activeBrand, dueSearchTerm]);
+    return dueProfilesData.map(p => ({ ...p.profile, nextPaymentDate: p.nextPaymentDate, amountDue: p.amountDue }));
+  }, [profiles, paymentsByProfile, videoCountsByProfile, dueSearchTerm]);
 
   const sortedDueProfiles = useMemo(() => {
       let sortableItems = [...dueProfiles];
       if (dueSortConfig !== null) {
           sortableItems.sort((a, b) => {
-              const key = dueSortConfig.key;
+              const key = dueSortConfig.key as keyof (typeof sortableItems)[0];
               let aValue, bValue;
 
               if (key === 'nextPaymentDate') {
                   aValue = a.nextPaymentDate ? a.nextPaymentDate.getTime() : 0;
                   bValue = b.nextPaymentDate ? b.nextPaymentDate.getTime() : 0;
               } else {
-                  aValue = a.tiktokId.toLowerCase();
-                  bValue = b.tiktokId.toLowerCase();
+                  aValue = a[key] ? String(a[key]).toLowerCase() : '';
+                  bValue = b[key] ? String(b[key]).toLowerCase() : '';
               }
               if (aValue < bValue) return dueSortConfig.direction === 'asc' ? -1 : 1;
               if (aValue > bValue) return dueSortConfig.direction === 'asc' ? 1 : -1;
@@ -205,20 +196,14 @@ const PaymentStatusTable: React.FC<PaymentStatusTableProps> = ({ profiles, video
   }, [dueProfiles, dueSortConfig]);
 
   const overviewProfiles = useMemo(() => {
-    if (!activeBrand) return [];
-    let filteredProfiles = profiles.filter(p => {
-        const profileBrandCounts = videoCountsByProfileAndBrand.get(p.tiktokId);
-        return profileBrandCounts && profileBrandCounts.has(activeBrand);
-    });
-
+    let filteredProfiles = [...profiles];
     if (overviewSearchTerm.trim() !== '') {
         filteredProfiles = filteredProfiles.filter(p =>
             p.tiktokId.toLowerCase().includes(overviewSearchTerm.toLowerCase())
         );
     }
-
     return filteredProfiles;
-  }, [profiles, activeBrand, videoCountsByProfileAndBrand, overviewSearchTerm]);
+  }, [profiles, overviewSearchTerm]);
 
   const requestDueSort = (key: 'nextPaymentDate' | 'tiktokId') => {
       let direction: 'asc' | 'desc' = 'asc';
@@ -282,7 +267,7 @@ const PaymentStatusTable: React.FC<PaymentStatusTableProps> = ({ profiles, video
   };
 
   const handleSavePayment = async (data: { amount: number; paymentDate: string; invoiceFile: File | null; }) => {
-    if (addPaymentModalProfileId) {
+    if (addPaymentModalProfileId && selectedBrand) {
         let paymentData: Omit<Payment, 'id'> = {
             tiktokId: addPaymentModalProfileId,
             amount: data.amount,
@@ -292,7 +277,7 @@ const PaymentStatusTable: React.FC<PaymentStatusTableProps> = ({ profiles, video
         if (data.invoiceFile) {
             setIsUploading(true);
             const file = data.invoiceFile;
-            const filePath = `invoices/${addPaymentModalProfileId}/${Date.now()}-${file.name}`;
+            const filePath = `${selectedBrand}/invoices/${addPaymentModalProfileId}/${Date.now()}-${file.name}`;
             const storageRef = ref(storage, filePath);
             try {
                 await uploadBytes(storageRef, file);
@@ -339,25 +324,7 @@ const PaymentStatusTable: React.FC<PaymentStatusTableProps> = ({ profiles, video
               />
           </div>
         </div>
-        <div className="px-4 pt-3 border-b border-gray-700">
-          <div className="flex space-x-1">
-            {brands.map(brand => (
-              <button
-                key={brand}
-                onClick={() => setActiveBrand(brand)}
-                className={`px-3 py-2 text-sm font-medium rounded-t-md transition-colors ${
-                  activeBrand === brand
-                    ? 'bg-gray-700 text-white'
-                    : 'bg-transparent text-gray-400 hover:bg-gray-700/50 hover:text-white'
-                }`}
-              >
-                {brand.toUpperCase()}
-              </button>
-            ))}
-          </div>
-        </div>
-        {activeBrand ? (
-          <div className="overflow-x-auto">
+        <div className="overflow-x-auto">
             <table className="w-full text-sm text-left text-gray-300">
               <thead className="text-xs text-gray-400 uppercase bg-gray-700/50">
                   <tr>
@@ -387,7 +354,7 @@ const PaymentStatusTable: React.FC<PaymentStatusTableProps> = ({ profiles, video
                               <td className="px-6 py-2 font-medium text-white whitespace-nowrap">{profile.tiktokId}</td>
                               <td className="px-6 py-2 whitespace-nowrap font-semibold">{profile.nextPaymentDate?.toISOString().split('T')[0]}</td>
                               <td className={`px-6 py-2 font-bold ${overdue.color}`}>{overdue.text}</td>
-                              <td className="px-6 py-2 font-semibold text-base">${(profile.contractAmount / 8).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                              <td className="px-6 py-2 font-semibold text-base">${(profile.amountDue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                               <td className="px-6 py-2 text-xs">{profile.paymentInfo}</td>
                               <td className="px-6 py-2 text-center">
                                   <button onClick={() => setAddPaymentModalProfileId(profile.tiktokId)} className="flex items-center justify-center mx-auto bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/40 text-xs font-bold py-1 px-3 rounded-md transition">
@@ -399,9 +366,8 @@ const PaymentStatusTable: React.FC<PaymentStatusTableProps> = ({ profiles, video
                   })}
                </tbody>
             </table>
-            {sortedDueProfiles.length === 0 && <p className="text-gray-400 text-center p-6">No payments are due for {activeBrand.toUpperCase()} based on current filters.</p>}
+            {sortedDueProfiles.length === 0 && <p className="text-gray-400 text-center p-6">No payments are due for this brand based on current filters.</p>}
           </div>
-        ) : <p className="text-gray-400 text-center p-6">Please add a brand in settings to see payment information.</p>}
       </div>
 
       <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 overflow-hidden">
@@ -423,69 +389,67 @@ const PaymentStatusTable: React.FC<PaymentStatusTableProps> = ({ profiles, video
                 />
             </div>
         </div>
-        {activeBrand ? (
-            <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left text-gray-300">
-                <thead className="text-xs text-gray-400 uppercase bg-gray-700/50">
-                <tr>
-                    <th scope="col" className="px-6 py-3">TikTok ID</th>
-                    <th scope="col" className="px-6 py-3 text-center">Videos ({activeBrand.toUpperCase()})</th>
-                    <th scope="col" className="px-6 py-3">Since</th>
-                    <th scope="col" className="px-6 py-3">Next Due</th>
-                    <th scope="col" className="px-6 py-3">Payment Info</th>
-                    <th scope="col" className="px-6 py-3">Last Payment Date</th>
-                    <th scope="col" className="px-6 py-3 text-center">Actions</th>
-                </tr>
-                </thead>
-                <tbody>
-                {overviewProfiles.map(profile => {
-                    const isEditing = editingInfo?.tiktokId === profile.tiktokId;
-                    const profilePayments = paymentsByProfile.get(profile.tiktokId) || [];
-                    const lastPayment = profilePayments.length > 0 
-                    ? [...profilePayments].sort((a,b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime())[0]
-                    : null;
-                    const nextPaymentDate = getNextPaymentDate(profile, lastPayment, profilePayments.length);
-                    const daysUntil = getDaysUntilPayment(nextPaymentDate);
-                    
-                    const videoCount = videoCountsByProfileAndBrand.get(profile.tiktokId)?.get(activeBrand) || 0;
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left text-gray-300">
+              <thead className="text-xs text-gray-400 uppercase bg-gray-700/50">
+              <tr>
+                  <th scope="col" className="px-6 py-3">TikTok ID</th>
+                  <th scope="col" className="px-6 py-3 text-center">Videos Uploaded</th>
+                  <th scope="col" className="px-6 py-3">Since</th>
+                  <th scope="col" className="px-6 py-3">Next Due</th>
+                  <th scope="col" className="px-6 py-3">Payment Info</th>
+                  <th scope="col" className="px-6 py-3">Last Payment Date</th>
+                  <th scope="col" className="px-6 py-3 text-center">Actions</th>
+              </tr>
+              </thead>
+              <tbody>
+              {overviewProfiles.map(profile => {
+                  const isEditing = editingInfo?.tiktokId === profile.tiktokId;
+                  const profilePayments = paymentsByProfile.get(profile.tiktokId) || [];
+                  const lastPayment = profilePayments.length > 0 
+                  ? [...profilePayments].sort((a,b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime())[0]
+                  : null;
+                  const nextPaymentDate = getNextPaymentDate(profile, lastPayment, profilePayments.length);
+                  const daysUntil = getDaysUntilPayment(nextPaymentDate);
+                  
+                  const videoCount = videoCountsByProfile.get(profile.tiktokId) || 0;
 
-                    return (
-                    <tr key={profile.tiktokId} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors">
-                        <td className="px-6 py-2 font-medium text-white whitespace-nowrap">{profile.tiktokId}</td>
-                        <td className="px-6 py-2 text-center font-semibold text-sm">{videoCount}</td>
-                        <td className="px-6 py-2">{getContractDuration(profile.startDate)}</td>
-                        <td className={`px-6 py-2 font-bold ${daysUntil.color}`}>{daysUntil.text}</td>
-                        <td className="px-6 py-2">
-                        <div className="flex items-center space-x-2">
-                            <textarea
-                                value={isEditing ? editingInfo.value : (profile.paymentInfo || '')}
-                                onChange={(e) => setEditingInfo({ tiktokId: profile.tiktokId, value: e.target.value })}
-                                className="bg-gray-700 border-gray-600 rounded-md px-2 py-1 text-xs text-white focus:ring-1 focus:ring-cyan-500 w-full min-w-40"
-                                placeholder="PayPal ID, etc..."
-                                rows={1}
-                            />
-                            {isEditing && (
-                                <>
-                                    <button onClick={handleSaveInfo} className="text-xs bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-1 px-2 rounded">Save</button>
-                                    <button onClick={handleCancelEdit} className="text-xs bg-gray-600 hover:bg-gray-500 text-white font-bold py-1 px-2 rounded">Cancel</button>
-                                </>
-                            )}
-                        </div>
-                        </td>
-                        <td className="px-6 py-2">{lastPayment?.paymentDate || 'N/A'}</td>
-                        <td className="px-6 py-2 text-center">
-                        <button onClick={() => setAddPaymentModalProfileId(profile.tiktokId)} className="flex items-center justify-center mx-auto bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/40 text-xs font-bold py-1 px-3 rounded-md transition">
-                            <PlusIcon className="h-4 w-4 mr-1"/> Add Payment
-                        </button>
-                        </td>
-                    </tr>
-                    );
-                })}
-                </tbody>
-            </table>
-            {overviewProfiles.length === 0 && <p className="text-gray-400 text-center p-6">No profiles match the current filter for {activeBrand.toUpperCase()}.</p>}
-            </div>
-        ) : <p className="text-gray-400 text-center p-6">Please add a brand in settings to see payment information.</p>}
+                  return (
+                  <tr key={profile.tiktokId} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors">
+                      <td className="px-6 py-2 font-medium text-white whitespace-nowrap">{profile.tiktokId}</td>
+                      <td className="px-6 py-2 text-center font-semibold text-sm">{videoCount}</td>
+                      <td className="px-6 py-2">{getContractDuration(profile.startDate)}</td>
+                      <td className={`px-6 py-2 font-bold ${daysUntil.color}`}>{daysUntil.text}</td>
+                      <td className="px-6 py-2">
+                      <div className="flex items-center space-x-2">
+                          <textarea
+                              value={isEditing ? editingInfo.value : (profile.paymentInfo || '')}
+                              onChange={(e) => setEditingInfo({ tiktokId: profile.tiktokId, value: e.target.value })}
+                              className="bg-gray-700 border-gray-600 rounded-md px-2 py-1 text-xs text-white focus:ring-1 focus:ring-cyan-500 w-full min-w-40"
+                              placeholder="PayPal ID, etc..."
+                              rows={1}
+                          />
+                          {isEditing && (
+                              <>
+                                  <button onClick={handleSaveInfo} className="text-xs bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-1 px-2 rounded">Save</button>
+                                  <button onClick={handleCancelEdit} className="text-xs bg-gray-600 hover:bg-gray-500 text-white font-bold py-1 px-2 rounded">Cancel</button>
+                              </>
+                          )}
+                      </div>
+                      </td>
+                      <td className="px-6 py-2">{lastPayment?.paymentDate || 'N/A'}</td>
+                      <td className="px-6 py-2 text-center">
+                      <button onClick={() => setAddPaymentModalProfileId(profile.tiktokId)} className="flex items-center justify-center mx-auto bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/40 text-xs font-bold py-1 px-3 rounded-md transition">
+                          <PlusIcon className="h-4 w-4 mr-1"/> Add Payment
+                      </button>
+                      </td>
+                  </tr>
+                  );
+              })}
+              </tbody>
+          </table>
+          {overviewProfiles.length === 0 && <p className="text-gray-400 text-center p-6">No profiles match the current filter for this brand.</p>}
+        </div>
       </div>
       <Modal isOpen={!!saveInfoConfirm} onClose={() => setSaveInfoConfirm(null)} title="Confirm Edit" size="sm">
           <div className="space-y-4">
@@ -505,7 +469,7 @@ const PaymentStatusTable: React.FC<PaymentStatusTableProps> = ({ profiles, video
           {profileForPaymentModal && (
             <AddPaymentForm 
                 onSave={handleSavePayment} 
-                initialAmount={profileForPaymentModal.contractAmount / 8}
+                initialAmount={profileForPaymentModal.contractAmount / profileForPaymentModal.numberOfPayments}
             />
           )}
       </Modal>

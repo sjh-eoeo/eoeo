@@ -8,19 +8,32 @@ export interface VideoRecord {
   brand: Brand;
   notes: string;
   videoFileName?: string;
-  videoFilePath?: string; // Path in Firebase Storage
+  videoFilePath?: string;
+  views?: number;
+  likes?: number;
+  gmvBoost?: {
+    enabled: boolean;
+    dailyBudget?: number; // KRW
+    duration?: number; // days
+  };
 }
 
 export interface Payment {
-  id:string;
+  id: string;
   tiktokId: string;
   amount: number;
   paymentDate: string;
   invoiceFileName?: string;
-  invoiceFilePath?: string; // Path in Firebase Storage
+  invoiceFilePath?: string;
 }
 
 export type PaymentCycle = 'weekly' | 'bi-weekly' | 'monthly';
+
+export interface ContractFile {
+  fileName: string;
+  filePath: string;
+  uploadedAt: string;
+}
 
 export interface Profile {
   tiktokId: string;
@@ -32,15 +45,18 @@ export interface Profile {
   paymentCycle: PaymentCycle;
   numberOfPayments: number;
   paymentInfo?: string;
+  contractFiles?: ContractFile[];
+  // Legacy fields (deprecated)
   contractFileName?: string;
-  contractFilePath?: string; // Path in Firebase Storage
+  contractFilePath?: string;
 }
 
 export type UserStatus = 'pending' | 'approved' | 'rejected';
+export type UserRole = 'admin' | 'user';
 
 export interface AppUser {
   uid: string;
   email: string | null;
   status: UserStatus;
-  role: 'admin' | 'user';
+  role: UserRole;
 }

@@ -1,107 +1,88 @@
-import React, { useState, useMemo } from 'react';
-import { VideoRecord, Profile, Brand } from '../types';
+import React from 'react';
+import { VideoRecord, Profile } from '../types';
 import { ChartIcon } from './icons/ChartIcon';
-import { SearchIcon } from './icons/SearchIcon';
 
 interface StatsDashboardProps {
   videos: VideoRecord[];
   profiles: Profile[];
-  brands: Brand[];
 }
 
-const StatsDashboard: React.FC<StatsDashboardProps> = ({ videos, profiles, brands }) => {
-  const [brandFilter, setBrandFilter] = useState<Brand | 'all'>('all');
-  const [searchTerm, setSearchTerm] = useState('');
+const StatsDashboard: React.FC<StatsDashboardProps> = ({ videos, profiles }) => {
 
-  const profileStats = useMemo(() => {
-    const filteredVideos = brandFilter === 'all'
-      ? videos
-      : videos.filter(v => v.brand === brandFilter);
+  const totalViews = videos.length;
+  const averageViews = totalViews > 0 ? (videos.reduce((acc, v) => acc + (v.views || 0), 0) / totalViews) : 0;
+  const totalLikes = videos.reduce((acc, v) => acc + (v.likes || 0), 0);
+  const engagementRate = totalViews > 0 ? (totalLikes / totalViews) * 100 : 0;
 
-    const videoCounts = new Map<string, number>();
-    filteredVideos.forEach(video => {
-      videoCounts.set(video.tiktokId, (videoCounts.get(video.tiktokId) || 0) + 1);
-    });
-
-    let stats = profiles.map(profile => ({
-        ...profile,
-        videoCount: videoCounts.get(profile.tiktokId) || 0,
-    }));
-    
-    if (searchTerm.trim() !== '') {
-        stats = stats.filter(s => s.tiktokId.toLowerCase().includes(searchTerm.toLowerCase()));
+  const videosByProfile = videos.reduce((acc, video) => {
+    if (!acc[video.tiktokId]) {
+      acc[video.tiktokId] = [];
     }
-    
-    const finalStats = brandFilter !== 'all' 
-        ? stats.filter(s => s.videoCount > 0)
-        : stats;
+    acc[video.tiktokId].push(video);
+    return acc;
+  }, {} as Record<string, VideoRecord[]>);
 
-    return finalStats.sort((a, b) => b.videoCount - a.videoCount);
-  }, [videos, profiles, brandFilter, searchTerm]);
+  const topPerformingProfiles = Object.keys(videosByProfile)
+    .map(tiktokId => ({
+      tiktokId,
+      videoCount: videosByProfile[tiktokId].length,
+      totalViews: videosByProfile[tiktokId].reduce((acc, v) => acc + (v.views || 0), 0),
+    }))
+    .sort((a, b) => b.totalViews - a.totalViews)
+    .slice(0, 5);
 
   return (
-    <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-semibold text-white flex items-center">
-          <ChartIcon className="h-6 w-6 mr-3 text-cyan-400" />
-          Account Stats
-        </h2>
-        <div className="flex items-center space-x-2">
-            <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <SearchIcon className="h-4 w-4 text-gray-400" />
-                </div>
-                <input
-                    type="text"
-                    placeholder="Search ID..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="bg-gray-700 border border-gray-600 rounded-md pl-9 pr-3 py-1.5 text-sm text-white focus:ring-1 focus:ring-cyan-500"
-                />
-            </div>
-            <select
-              value={brandFilter}
-              onChange={(e) => setBrandFilter(e.target.value as Brand | 'all')}
-              className="bg-gray-700 border border-gray-600 rounded-md px-3 py-1.5 text-sm text-white focus:ring-1 focus:ring-cyan-500"
-              aria-label="Filter stats by brand"
-            >
-              <option value="all">All Brands</option>
-              {brands.map(b => (
-                  <option key={b} value={b}>{b.toUpperCase()}</option>
-              ))}
-            </select>
+    <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6">
+      <h3 className="text-xl font-semibold text-white mb-6 flex items-center">
+        <ChartIcon className="h-6 w-6 mr-3 text-cyan-400" />
+        Statistics
+      </h3>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="bg-gray-700/50 p-4 rounded-lg text-center">
+          <p className="text-sm text-gray-400">Total Videos</p>
+          <p className="text-2xl font-bold text-white">{totalViews.toLocaleString()}</p>
+        </div>
+        <div className="bg-gray-700/50 p-4 rounded-lg text-center">
+          <p className="text-sm text-gray-400">Avg. Views</p>
+          <p className="text-2xl font-bold text-white">{Math.round(averageViews).toLocaleString()}</p>
+        </div>
+        <div className="bg-gray-700/50 p-4 rounded-lg text-center">
+          <p className="text-sm text-gray-400">Total Likes</p>
+          <p className="text-2xl font-bold text-white">{totalLikes.toLocaleString()}</p>
+        </div>
+        <div className="bg-gray-700/50 p-4 rounded-lg text-center">
+          <p className="text-sm text-gray-400">Engagement Rate</p>
+          <p className="text-2xl font-bold text-white">{engagementRate.toFixed(2)}%</p>
         </div>
       </div>
-      {profileStats.length > 0 ? (
-         <div className="max-h-96 overflow-y-auto pr-2">
-            <table className="w-full text-sm text-left text-gray-300">
-                <thead className="text-xs text-gray-400 uppercase bg-gray-700/50 sticky top-0">
-                    <tr>
-                        <th scope="col" className="px-6 py-3">Profile</th>
-                        <th scope="col" className="px-6 py-3 text-center">Uploaded Videos</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-700/50">
-                    {profileStats.map((stat) => (
-                        <tr key={stat.tiktokId} className="hover:bg-gray-700/50">
-                            <td className="px-6 py-4 font-medium text-white whitespace-nowrap">
-                                {stat.tiktokProfileLink ? (
-                                    <a href={stat.tiktokProfileLink} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">
-                                        {stat.tiktokId}
-                                    </a>
-                                ) : (
-                                    <span>{stat.tiktokId}</span>
-                                )}
-                            </td>
-                            <td className="px-6 py-4 text-center font-bold text-lg">{stat.videoCount}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+
+      <div>
+        <h4 className="text-lg font-semibold text-white mb-4">Top 5 Performing Profiles</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left text-gray-300">
+            <thead className="text-xs text-gray-400 uppercase bg-gray-700/50">
+              <tr>
+                <th className="px-6 py-3">Profile</th>
+                <th className="px-6 py-3 text-right">Video Count</th>
+                <th className="px-6 py-3 text-right">Total Views</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topPerformingProfiles.map(p => (
+                <tr key={p.tiktokId} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50">
+                  <td className="px-6 py-4 font-medium text-white whitespace-nowrap">{p.tiktokId}</td>
+                  <td className="px-6 py-4 text-right">{p.videoCount}</td>
+                  <td className="px-6 py-4 text-right">{p.totalViews.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {topPerformingProfiles.length === 0 && (
+            <p className="text-center text-gray-400 py-6">No profile performance data available.</p>
+          )}
         </div>
-      ) : (
-        <p className="text-gray-400 text-center py-4">No data available for the selected filter.</p>
-      )}
+      </div>
     </div>
   );
 };

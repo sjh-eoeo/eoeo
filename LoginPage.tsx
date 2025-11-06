@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { auth, db } from './src/lib/firebase/config';
 import { TikTokIcon } from './components/icons/TikTokIcon';
 import { GoogleIcon } from './components/icons/GoogleIcon';
 

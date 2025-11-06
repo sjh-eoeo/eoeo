@@ -3,16 +3,14 @@ import { VideoRecord, Brand, Profile } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
 
 interface VideoFormProps {
-  onAddVideo: (video: Omit<VideoRecord, 'id' | 'notes'>) => void;
+  onAddVideo: (video: Omit<VideoRecord, 'id' | 'notes' | 'brand'>) => void;
   profiles: Profile[];
-  brands: Brand[];
 }
 
-const VideoForm: React.FC<VideoFormProps> = ({ onAddVideo, profiles, brands }) => {
+const VideoForm: React.FC<VideoFormProps> = ({ onAddVideo, profiles }) => {
   const [selectedTiktokId, setSelectedTiktokId] = useState('');
   const [videoId, setVideoId] = useState('');
   const [uploadDate, setUploadDate] = useState(new Date().toISOString().split('T')[0]);
-  const [selectedBrand, setSelectedBrand] = useState<Brand>('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -21,25 +19,18 @@ const VideoForm: React.FC<VideoFormProps> = ({ onAddVideo, profiles, brands }) =
     }
   }, [profiles, selectedTiktokId]);
 
-  useEffect(() => {
-    if (!selectedBrand && brands.length > 0) {
-      setSelectedBrand(brands[0]);
-    }
-  }, [brands, selectedBrand]);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTiktokId || !videoId.trim() || !uploadDate || !selectedBrand) {
-      setError('TikTok Profile, Video ID, Brand, and Upload Date are required.');
+    if (!selectedTiktokId || !videoId.trim() || !uploadDate) {
+      setError('TikTok Profile, Video ID, and Upload Date are required.');
       return;
     }
     setError('');
-    onAddVideo({ tiktokId: selectedTiktokId, videoId, uploadDate, brand: selectedBrand });
+    onAddVideo({ tiktokId: selectedTiktokId, videoId, uploadDate });
     // Reset form for next entry
     setVideoId('');
     // Reselecting defaults after submit
     setSelectedTiktokId(profiles[0]?.tiktokId || '');
-    setSelectedBrand(brands[0] || '');
   };
 
   return (
@@ -77,22 +68,6 @@ const VideoForm: React.FC<VideoFormProps> = ({ onAddVideo, profiles, brands }) =
           />
         </div>
         <div>
-            <label htmlFor="brand" className="block text-sm font-medium text-gray-300 mb-2">
-                Brand
-            </label>
-            <select
-                id="brand"
-                value={selectedBrand}
-                onChange={(e) => setSelectedBrand(e.target.value as Brand)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-md px-4 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition"
-            >
-                <option value="" disabled>-- Select a Brand --</option>
-                {brands.map(b => (
-                    <option key={b} value={b}>{b.toUpperCase()}</option>
-                ))}
-            </select>
-        </div>
-        <div>
           <label htmlFor="uploadDate" className="block text-sm font-medium text-gray-300 mb-2">
             Upload Date
           </label>
@@ -107,14 +82,13 @@ const VideoForm: React.FC<VideoFormProps> = ({ onAddVideo, profiles, brands }) =
         {error && <p className="text-red-400 text-sm">{error}</p>}
         <button
           type="submit"
-          disabled={profiles.length === 0 || brands.length === 0}
+          disabled={profiles.length === 0}
           className="w-full flex items-center justify-center bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold py-3 px-4 rounded-md hover:from-cyan-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-cyan-500 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <PlusIcon className="h-5 w-5 mr-2" />
           Add Video Record
         </button>
         {profiles.length === 0 && <p className="text-yellow-400 text-xs mt-2 text-center">Please add a profile first.</p>}
-        {brands.length === 0 && <p className="text-yellow-400 text-xs mt-2 text-center">Please add a brand first.</p>}
       </form>
     </div>
   );

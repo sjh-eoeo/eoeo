@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { Routes, Route, NavLink } from 'react-router-dom';
 import { User } from 'firebase/auth';
 import { collection, onSnapshot, addDoc, doc, updateDoc, setDoc, deleteDoc, query, writeBatch } from 'firebase/firestore';
 import { ref, getDownloadURL } from 'firebase/storage';
@@ -6,13 +7,12 @@ import { db, storage } from './firebase';
 import { VideoRecord, Profile, Brand, Payment, AppUser, UserStatus } from './types';
 import VideoForm from './components/VideoForm';
 import NewProfileForm from './components/NewProfileForm';
-import VideoDataTable from './components/VideoTable';
+import VideoTable from './components/VideoTable';
 import ProfileDataTable from './components/ProfileDataTable';
 import PaymentStatusTable from './components/PaymentStatusTable';
 import StatsDashboard from './components/StatsDashboard';
 import DashboardSummaryCard from './components/DashboardSummaryCard';
 import Modal from './components/Modal';
-import { TikTokIcon } from './components/icons/TikTokIcon';
 import { DashboardIcon } from './components/icons/DashboardIcon';
 import { ListIcon } from './components/icons/ListIcon';
 import { UserGroupIcon } from './components/icons/UserGroupIcon';
@@ -28,8 +28,6 @@ import FullScreenMessage from './components/FullScreenMessage';
 import AdminPage from './components/AdminPage';
 
 
-type Page = 'dashboard' | 'videos' | 'profiles' | 'payment' | 'docs' | 'settings' | 'admin';
-
 interface AppProps {
   user: User;
   appUser: AppUser;
@@ -44,8 +42,9 @@ const App: React.FC<AppProps> = ({ user, appUser, onSignOut }) => {
   const [allUsers, setAllUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const [activePage, setActivePage] = useState<Page>('dashboard');
+  const [selectedBrand, setSelectedBrand] = useState<Brand | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalContent, setModalContent] = useState<'video' | 'profile' | null>(null);
   const [viewingFile, setViewingFile] = useState<{ name: string; url: string } | null>(null);
 
   useEffect(() => {
@@ -53,6 +52,7 @@ const App: React.FC<AppProps> = ({ user, appUser, onSignOut }) => {
     const unsubVideos = onSnapshot(videoQuery, (snapshot) => {
       const videoData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VideoRecord));
       setVideos(videoData);
+      setLoading(false);
     });
 
     const profileQuery = query(collection(db, 'profiles'));
@@ -70,9 +70,18 @@ const App: React.FC<AppProps> = ({ user, appUser, onSignOut }) => {
     const brandsDocRef = doc(db, 'config', 'brandsDoc');
     const unsubBrands = onSnapshot(brandsDocRef, (docSnap) => {
         if (docSnap.exists()) {
-            setBrands(docSnap.data().names || []);
+            const brandNames = docSnap.data().names || [];
+            setBrands(brandNames);
+            if (!selectedBrand && brandNames.length > 0) {
+              setSelectedBrand(brandNames[0]);
+            }
         } else {
-            setDoc(brandsDocRef, { names: ['kahi', 'marsmade'] });
+            const defaultBrands = ['kahi', 'marsmade'];
+            setDoc(brandsDocRef, { names: defaultBrands });
+            setBrands(defaultBrands);
+            if (!selectedBrand) {
+              setSelectedBrand(defaultBrands[0]);
+            }
         }
     });
 
@@ -85,12 +94,6 @@ const App: React.FC<AppProps> = ({ user, appUser, onSignOut }) => {
       });
     }
 
-
-    // A simple way to remove the initial loader
-    Promise.all([
-      new Promise(resolve => setTimeout(resolve, 500)) 
-    ]).then(() => setLoading(false));
-
     return () => {
       unsubVideos();
       unsubProfiles();
@@ -98,12 +101,28 @@ const App: React.FC<AppProps> = ({ user, appUser, onSignOut }) => {
       unsubBrands();
       unsubUsers();
     };
-  }, [appUser.role]);
+  }, [appUser.role, selectedBrand]);
 
-  const addVideo = async (newVideoData: Omit<VideoRecord, 'id' | 'notes'>) => {
+  const filteredVideos = useMemo(() => {
+    if (!selectedBrand) return [];
+    return videos.filter(video => video.brand === selectedBrand);
+  }, [videos, selectedBrand]);
+
+  const filteredProfiles = useMemo(() => {
+    if (!selectedBrand) return profiles;
+    const relevantProfileIds = new Set(filteredVideos.map(v => v.tiktokId));
+    return profiles.filter(p => relevantProfileIds.has(p.tiktokId));
+  }, [profiles, filteredVideos, selectedBrand]);
+
+  const addVideo = async (newVideoData: Omit<VideoRecord, 'id' | 'notes' | 'brand'>) => {
+    if (!selectedBrand) {
+      alert("Please select a brand first.");
+      return;
+    }
     try {
       await addDoc(collection(db, 'videos'), { 
         ...newVideoData,
+        brand: selectedBrand,
         notes: ''
       });
       setIsModalOpen(false);
@@ -138,14 +157,15 @@ const App: React.FC<AppProps> = ({ user, appUser, onSignOut }) => {
     }
   };
 
-  const addProfile = async (newProfileData: Pick<Profile, 'tiktokId' | 'contractAmount' | 'startDate' | 'tiktokProfileLink'>) => {
+  const addProfile = async (newProfileData: Omit<Profile, 'paymentInfo' | 'contractFileName' | 'contractFilePath'>) => {
     if (profiles.some(p => p.tiktokId === newProfileData.tiktokId)) {
       alert('A profile with this TikTok ID already exists.');
       return;
     }
     try {
       const profileRef = doc(db, 'profiles', newProfileData.tiktokId);
-      await setDoc(profileRef, { ...newProfileData, paymentWeek: 0, paymentInfo: '' });
+      await setDoc(profileRef, { ...newProfileData, paymentInfo: '' });
+      setModalContent(null);
       setIsModalOpen(false);
     } catch (error) {
       console.error("Error adding profile: ", error);
@@ -206,6 +226,9 @@ const App: React.FC<AppProps> = ({ user, appUser, onSignOut }) => {
     try {
       const brandsDocRef = doc(db, 'config', 'brandsDoc');
       await updateDoc(brandsDocRef, { names: brands.filter(b => b !== brandToRemove) });
+      if (selectedBrand === brandToRemove) {
+        setSelectedBrand(brands.length > 1 ? brands.filter(b => b !== brandToRemove)[0] : null);
+      }
     } catch (error) {
       console.error("Error removing brand: ", error);
       alert("Failed to remove brand.");
@@ -237,47 +260,71 @@ const App: React.FC<AppProps> = ({ user, appUser, onSignOut }) => {
     return <FullScreenMessage title="Loading Dashboard..." message="Fetching your data from the cloud." />;
   }
 
-  const PageNavigation = () => (
-    <div className="mb-8">
-      <div className="flex space-x-2 border-b border-gray-700">
-        {[
-          { id: 'dashboard', label: 'Dashboard', icon: DashboardIcon },
-          { id: 'videos', label: 'Video Management', icon: ListIcon },
-          { id: 'profiles', label: 'Profile Management', icon: UserGroupIcon },
-          { id: 'payment', label: 'Payment Status', icon: DollarIcon },
-          { id: 'docs', label: 'Docs', icon: DocumentIcon },
-          { id: 'settings', label: 'Settings', icon: CogIcon },
-          ...(appUser.role === 'admin' ? [{ id: 'admin', label: 'Admin', icon: ShieldCheckIcon }] : [])
-        ].map(page => {
-          const Icon = page.icon;
-          return (
-            <button
-              key={page.id}
-              onClick={() => setActivePage(page.id as Page)}
-              className={`flex items-center space-x-2 px-4 py-3 text-sm font-medium transition-colors duration-200 ease-in-out -mb-px border-b-2
-                ${
-                  activePage === page.id
-                    ? 'border-cyan-400 text-cyan-400'
-                    : 'border-transparent text-gray-400 hover:text-white'
-                }`}
-            >
-              <Icon className="h-5 w-5" />
-              <span>{page.label}</span>
-            </button>
-          );
-        })}
-      </div>
+  const BrandNavigation = () => (
+    <div className="flex items-center space-x-2 overflow-x-auto pb-2 mb-4">
+      {brands.map(brand => (
+        <button
+          key={brand}
+          onClick={() => setSelectedBrand(brand)}
+          className={`px-4 py-2 text-sm font-bold rounded-full transition-colors duration-200 ease-in-out whitespace-nowrap ${
+            selectedBrand === brand
+              ? 'bg-gradient-to-r from-cyan-400 to-pink-500 text-white shadow-lg'
+              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+          }`}
+        >
+          {brand.toUpperCase()}
+        </button>
+      ))}
     </div>
   );
+
+  const PageNavigation = () => {
+    const navItems = [
+      { path: '/', label: 'Dashboard', icon: DashboardIcon },
+      { path: '/videos', label: 'Video Management', icon: ListIcon },
+      { path: '/profiles', label: 'Profile Management', icon: UserGroupIcon },
+      { path: '/payments', label: 'Payment Status', icon: DollarIcon },
+      { path: '/docs', label: 'Docs', icon: DocumentIcon },
+      { path: '/settings', label: 'Settings', icon: CogIcon },
+      ...(appUser.role === 'admin' ? [{ path: '/admin', label: 'Admin', icon: ShieldCheckIcon }] : [])
+    ];
+
+    return (
+      <div className="mb-8">
+        <div className="flex space-x-2 border-b border-gray-700">
+          {navItems.map(item => {
+            const Icon = item.icon;
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                end
+                className={({ isActive }) => 
+                  `flex items-center space-x-2 px-4 py-3 text-sm font-medium transition-colors duration-200 ease-in-out -mb-px border-b-2 ${
+                    isActive
+                      ? 'border-cyan-400 text-cyan-400'
+                      : 'border-transparent text-gray-400 hover:text-white'
+                  }`
+                }
+              >
+                <Icon className="h-5 w-5" />
+                <span>{item.label}</span>
+              </NavLink>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   const DashboardPage = () => (
     <div className="space-y-8">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <DashboardSummaryCard title="Total Profiles" value={profiles.length} />
-        <DashboardSummaryCard title="Total Videos" value={videos.length} />
-        <VideoUploadStats videos={videos} />
+        <DashboardSummaryCard title="Total Profiles" value={filteredProfiles.length} />
+        <DashboardSummaryCard title="Total Videos" value={filteredVideos.length} />
+        <VideoUploadStats videos={filteredVideos} />
       </div>
-      <StatsDashboard videos={videos} profiles={profiles} brands={brands} />
+      <StatsDashboard videos={filteredVideos} profiles={filteredProfiles} />
     </div>
   );
   
@@ -285,24 +332,20 @@ const App: React.FC<AppProps> = ({ user, appUser, onSignOut }) => {
     <>
       <div className="flex justify-end mb-4">
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => { setIsModalOpen(true); setModalContent('video'); }}
           className="flex items-center justify-center bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold py-2 px-4 rounded-md hover:from-cyan-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-cyan-500 transition-all duration-300"
         >
           <PlusIcon className="h-5 w-5 mr-2" />
           Add New Video
         </button>
       </div>
-      <VideoDataTable 
-        videos={videos} 
+      <VideoTable 
+        videos={filteredVideos} 
         onUpdateVideo={updateVideo} 
-        brands={brands}
         appUser={appUser}
         onDeleteVideos={deleteVideos}
         onViewFile={handleViewFile}
       />
-      <Modal isOpen={isModalOpen && activePage === 'videos'} onClose={() => setIsModalOpen(false)} title="Add New Video Record">
-        <VideoForm onAddVideo={addVideo} profiles={profiles} brands={brands} />
-      </Modal>
     </>
   );
 
@@ -310,7 +353,7 @@ const App: React.FC<AppProps> = ({ user, appUser, onSignOut }) => {
     <>
       <div className="flex justify-end mb-4">
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => { setIsModalOpen(true); setModalContent('profile'); }}
           className="flex items-center justify-center bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold py-2 px-4 rounded-md hover:from-cyan-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-cyan-500 transition-all duration-300"
         >
           <PlusIcon className="h-5 w-5 mr-2" />
@@ -318,7 +361,7 @@ const App: React.FC<AppProps> = ({ user, appUser, onSignOut }) => {
         </button>
       </div>
       <ProfileDataTable 
-        profiles={profiles} 
+        profiles={filteredProfiles} 
         videos={videos} 
         payments={payments}
         onUpdateProfile={updateProfile}
@@ -326,57 +369,15 @@ const App: React.FC<AppProps> = ({ user, appUser, onSignOut }) => {
         appUser={appUser}
         onDeleteProfiles={deleteProfiles}
       />
-      <Modal isOpen={isModalOpen && activePage === 'profiles'} onClose={() => setIsModalOpen(false)} title="Register New Profile">
-        <NewProfileForm onAddProfile={addProfile} />
-      </Modal>
     </>
   );
-
-  const PaymentStatusPage = () => (
-      <PaymentStatusTable 
-        profiles={profiles} 
-        videos={videos} 
-        payments={payments}
-        onUpdateProfile={updateProfile} 
-        onAddPayment={addPayment}
-        brands={brands}
-      />
-  );
-
-  const Docs = () => (
-    <DocsPage 
-      profiles={profiles} 
-      payments={payments}
-      onViewFile={handleViewFile}
-    />
-  );
-
-  const Settings = () => (
-    <SettingsPage 
-      brands={brands} 
-      onAddBrand={addBrand} 
-      onRemoveBrand={removeBrand} 
-    />
-  );
-  
-  const Admin = () => (
-    <AdminPage 
-      users={allUsers}
-      currentUser={appUser}
-      onUpdateUserStatus={updateUserStatus}
-    />
-  );
-
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-200 font-sans">
       <div className="container mx-auto p-4 md:p-8">
         <header className="mb-8 flex flex-col sm:flex-row items-center justify-between">
-            <div className="flex items-center justify-center space-x-3">
-              <TikTokIcon className="h-10 w-10 text-cyan-400" />
-              <h1 className="text-3xl md:text-4xl font-bold text-center bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-pink-500">
-                TikTok Video Management Dashboard
-              </h1>
+            <div className="flex-grow">
+              <BrandNavigation />
             </div>
             <div className="mt-4 sm:mt-0 flex items-center space-x-3">
                 <span className="text-sm text-gray-400 truncate max-w-xs">{user.email}</span>
@@ -392,14 +393,25 @@ const App: React.FC<AppProps> = ({ user, appUser, onSignOut }) => {
         <PageNavigation />
         
         <main>
-            {activePage === 'dashboard' && <DashboardPage />}
-            {activePage === 'videos' && <VideoManagementPage />}
-            {activePage === 'profiles' && <ProfileManagementPage />}
-            {activePage === 'payment' && <PaymentStatusPage />}
-            {activePage === 'docs' && <Docs />}
-            {activePage === 'settings' && <Settings />}
-            {activePage === 'admin' && <Admin />}
+          <Routes>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/videos" element={<VideoManagementPage />} />
+            <Route path="/profiles" element={<ProfileManagementPage />} />
+            <Route path="/payments" element={<PaymentStatusTable profiles={filteredProfiles} videos={filteredVideos} payments={payments} selectedBrand={selectedBrand} onUpdateProfile={updateProfile} onAddPayment={addPayment} />} />
+            <Route path="/docs" element={<DocsPage profiles={profiles} payments={payments} onViewFile={handleViewFile} />} />
+            <Route path="/settings" element={<SettingsPage brands={brands} onAddBrand={addBrand} onRemoveBrand={removeBrand} />} />
+            {appUser.role === 'admin' && <Route path="/admin" element={<AdminPage users={allUsers} currentUser={appUser} onUpdateUserStatus={updateUserStatus} />} />}
+          </Routes>
         </main>
+
+        <Modal 
+          isOpen={isModalOpen} 
+          onClose={() => setIsModalOpen(false)} 
+          title={modalContent === 'video' ? "Add New Video Record" : "Register New Profile"}
+        >
+          {modalContent === 'video' && <VideoForm onAddVideo={addVideo} profiles={filteredProfiles} />}
+          {modalContent === 'profile' && <NewProfileForm onAddProfile={addProfile} />}
+        </Modal>
 
         {viewingFile && (
           <Modal 
