@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useAuthStore } from '../store/useAuthStore';
 import { usePaymentStore } from '../store/usePaymentStore';
+import { useProfileStore } from '../store/useProfileStore';
 import { Button } from '../components/ui/Button';
 import { DataTable } from '../components/ui/DataTable';
 import { formatCurrency } from '../lib/utils/currency';
@@ -23,6 +24,7 @@ interface FinanceRecord {
   amount: number;
   invoiceFilePath?: string;
   brand: string;
+  contractFiles?: Array<{ fileName: string; filePath: string; uploadedAt: string }>;
 }
 
 const columnHelper = createColumnHelper<FinanceRecord>();
@@ -30,11 +32,21 @@ const columnHelper = createColumnHelper<FinanceRecord>();
 export const FinancePage: React.FC = () => {
   const { appUser } = useAuthStore();
   const { payments } = usePaymentStore();
+  const { profiles } = useProfileStore();
   const { getFileURL } = useStorage();
   
   // Date range filter
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  // Create profile lookup map
+  const profilesMap = useMemo(() => {
+    const map = new Map();
+    profiles.forEach(profile => {
+      map.set(profile.tiktokId, profile);
+    });
+    return map;
+  }, [profiles]);
 
   // Check if user has finance or admin role
   if (!appUser || (appUser.role !== 'admin' && appUser.role !== 'finance')) {
@@ -57,6 +69,7 @@ export const FinancePage: React.FC = () => {
   // Prepare finance records (통합 - 브랜드 구분 없음)
   const financeRecords = useMemo(() => {
     return payments.map((payment) => {
+      const profile = profilesMap.get(payment.tiktokId);
       return {
         id: payment.id,
         paymentDate: payment.paymentDate,
@@ -64,9 +77,10 @@ export const FinancePage: React.FC = () => {
         amount: payment.amount,
         invoiceFilePath: payment.invoiceFilePath,
         brand: payment.brand,
+        contractFiles: profile?.contractFiles || [],
       };
     });
-  }, [payments]);
+  }, [payments, profilesMap]);
 
   // Filter by date range
   const filteredRecords = useMemo(() => {
@@ -172,6 +186,43 @@ export const FinancePage: React.FC = () => {
           </button>
         ) : (
           <span className="text-xs text-gray-500">No file</span>
+        );
+      },
+    }),
+    columnHelper.accessor('contractFiles', {
+      header: 'Contract Files',
+      cell: (info) => {
+        const contractFiles = info.getValue() || [];
+        
+        const handleViewContract = async (filePath: string) => {
+          try {
+            const url = await getFileURL(filePath);
+            window.open(url, '_blank');
+          } catch (error) {
+            console.error('Failed to get contract file URL:', error);
+            alert('Failed to open contract file');
+          }
+        };
+        
+        if (contractFiles.length === 0) {
+          return <span className="text-xs text-gray-500">No files</span>;
+        }
+        
+        return (
+          <div className="flex flex-col gap-1">
+            {contractFiles.map((file, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleViewContract(file.filePath)}
+                className="text-xs text-purple-400 hover:text-purple-300 underline cursor-pointer text-left"
+                title={file.fileName}
+              >
+                {file.fileName.length > 20 
+                  ? `${file.fileName.substring(0, 20)}...` 
+                  : file.fileName}
+              </button>
+            ))}
+          </div>
         );
       },
     }),
