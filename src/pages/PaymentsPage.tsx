@@ -8,6 +8,7 @@ import { DataTable } from '../components/ui/DataTable';
 import { Button } from '../components/ui/Button';
 import { SearchBar } from '../components/ui/SearchBar';
 import { Modal } from '../components/ui/Modal';
+import { Tutorial } from '../components/ui/Tutorial';
 import { PaymentForm } from '../components/features/payments/PaymentForm';
 import { useTableState, createTable } from '../hooks/useTableState';
 import { useFirestore } from '../hooks/useFirestore';
@@ -50,6 +51,11 @@ export const PaymentsPage: React.FC = () => {
   const filteredOverviewProfiles = useMemo(() => {
     let result = [...profiles];
 
+    // Filter by brand
+    if (selectedBrand) {
+      result = result.filter((p) => p.brand === selectedBrand);
+    }
+
     // Filter by search
     if (overviewSearchTerm.trim()) {
       const term = overviewSearchTerm.toLowerCase();
@@ -57,7 +63,7 @@ export const PaymentsPage: React.FC = () => {
     }
 
     return result;
-  }, [profiles, overviewSearchTerm]);
+  }, [profiles, selectedBrand, overviewSearchTerm]);
 
   const handleAddPayment = async (data: {
     amount: number;
@@ -83,6 +89,7 @@ export const PaymentsPage: React.FC = () => {
       // Add payment document
       await addDocument('payments', {
         tiktokId: selectedProfile.tiktokId,
+        brand: selectedProfile.brand,
         amount: data.amount,
         paymentDate: data.paymentDate,
         invoiceFileName,
@@ -249,9 +256,11 @@ export const PaymentsPage: React.FC = () => {
   });
 
   return (
-    <div className="space-y-8">
-      {/* Payments Due Section */}
-      <div>
+    <>
+      <Tutorial page="payments" />
+      <div className="space-y-8">
+        {/* Payments Due Section */}
+        <div>
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-xl font-semibold text-white">
             Action Required: Payments Due
@@ -303,10 +312,12 @@ export const PaymentsPage: React.FC = () => {
           <PaymentForm
             tiktokId={selectedProfile.tiktokId}
             suggestedAmount={selectedProfile.amountDue}
+            paymentInfo={selectedProfile.paymentInfo}
             onSubmit={handleAddPayment}
           />
         </Modal>
       )}
-    </div>
+      </div>
+    </>
   );
 };

@@ -3,6 +3,7 @@ export const ROUTES = {
   VIDEOS: '/videos',
   PROFILES: '/profiles',
   PAYMENTS: '/payments',
+  FINANCE: '/finance',
   DOCS: '/docs',
   SETTINGS: '/settings',
   ADMIN: '/admin',

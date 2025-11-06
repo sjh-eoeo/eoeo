@@ -78,7 +78,7 @@ const Auth: React.FC = () => {
     return (
       <FullScreenMessage
         title="Approval Pending"
-        message="Your account is waiting for administrator approval."
+        message="Your account is waiting for administrator approval. Please contact sjh@egongegong.com via Slack or email to expedite the process."
         onSignOut={handleSignOut}
         userEmail={user.email}
       />

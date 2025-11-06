@@ -173,7 +173,7 @@ const ProfileDataTable: React.FC<ProfileDataTableProps> = ({ profiles, videos, p
             <tr>
               {appUser.role === 'admin' && (
                 <th scope="col" className="p-4">
-                  <input type="checkbox" onChange={handleSelectAll} checked={filteredProfiles.length > 0 && selectedIds.size === filteredProfiles.length} className="w-4 h-4 text-cyan-600 bg-gray-700 border-gray-600 rounded focus:ring-cyan-500"/>
+                  <input type="checkbox" onChange={handleSelectAll} checked={filteredProfiles.length > 0 && selectedIds.size === filteredProfiles.length} className="w-4 h-4 text-cyan-500 bg-gray-900 border-2 border-gray-500 rounded focus:ring-2 focus:ring-cyan-500 cursor-pointer"/>
                 </th>
               )}
               <th scope="col" className="px-6 py-3">TikTok ID</th>
@@ -193,7 +193,7 @@ const ProfileDataTable: React.FC<ProfileDataTableProps> = ({ profiles, videos, p
                 <tr key={profile.tiktokId} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors">
                   {appUser.role === 'admin' && (
                       <td className="w-4 p-4">
-                        <input type="checkbox" checked={selectedIds.has(profile.tiktokId)} onChange={() => handleSelectOne(profile.tiktokId)} className="w-4 h-4 text-cyan-600 bg-gray-700 border-gray-600 rounded focus:ring-cyan-500"/>
+                        <input type="checkbox" checked={selectedIds.has(profile.tiktokId)} onChange={() => handleSelectOne(profile.tiktokId)} className="w-4 h-4 text-cyan-500 bg-gray-900 border-2 border-gray-500 rounded focus:ring-2 focus:ring-cyan-500 cursor-pointer"/>
                       </td>
                   )}
                   <td className="px-6 py-2 font-medium text-white whitespace-nowrap">{profile.tiktokId}</td>

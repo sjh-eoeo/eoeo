@@ -10,6 +10,7 @@ import { Modal } from '../components/ui/Modal';
 import { VideoForm } from '../components/features/videos/VideoForm';
 import { useTableState, createTable } from '../hooks/useTableState';
 import { useFirestore } from '../hooks/useFirestore';
+import { Tutorial } from '../components/ui/Tutorial';
 import type { VideoRecord } from '../types';
 
 export const VideosPage: React.FC = () => {
@@ -85,6 +86,12 @@ export const VideosPage: React.FC = () => {
   const handleDeleteSelected = async () => {
     if (selectedIds.size === 0) return;
     
+    // Check if user is admin
+    if (appUser?.role !== 'admin') {
+      alert('Only admins can delete videos');
+      return;
+    }
+    
     if (!confirm(`Delete ${selectedIds.size} video(s)?`)) return;
 
     try {
@@ -105,7 +112,7 @@ export const VideosPage: React.FC = () => {
             type="checkbox"
             checked={table.getIsAllRowsSelected()}
             onChange={table.getToggleAllRowsSelectedHandler()}
-            className="w-4 h-4 text-cyan-600 bg-gray-700 border-gray-600 rounded focus:ring-cyan-500"
+            className="w-4 h-4 text-cyan-500 bg-gray-900 border-2 border-gray-500 rounded focus:ring-2 focus:ring-cyan-500 cursor-pointer"
           />
         ),
         cell: ({ row }) => (
@@ -113,7 +120,7 @@ export const VideosPage: React.FC = () => {
             type="checkbox"
             checked={row.getIsSelected()}
             onChange={row.getToggleSelectedHandler()}
-            className="w-4 h-4 text-cyan-600 bg-gray-700 border-gray-600 rounded focus:ring-cyan-500"
+            className="w-4 h-4 text-cyan-500 bg-gray-900 border-2 border-gray-500 rounded focus:ring-2 focus:ring-cyan-500 cursor-pointer"
           />
         ),
         size: 50,
@@ -121,16 +128,39 @@ export const VideosPage: React.FC = () => {
       {
         accessorKey: 'tiktokId',
         header: 'TikTok ID',
-        cell: (info) => (
-          <span className="font-medium text-white whitespace-nowrap">
-            {info.getValue() as string}
-          </span>
-        ),
+        cell: ({ row }) => {
+          const tiktokId = row.original.tiktokId;
+          const profileUrl = row.original.tiktokProfileUrl || `https://www.tiktok.com/@${tiktokId}`;
+          return (
+            <a
+              href={profileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-cyan-400 hover:text-cyan-300 hover:underline whitespace-nowrap cursor-pointer"
+            >
+              {tiktokId}
+            </a>
+          );
+        },
       },
       {
         accessorKey: 'videoId',
         header: 'Video ID',
-        cell: (info) => info.getValue() as string,
+        cell: ({ row }) => {
+          const videoId = row.original.videoId;
+          const tiktokId = row.original.tiktokId;
+          const videoUrl = row.original.videoUrl || `https://www.tiktok.com/@${tiktokId}/video/${videoId}`;
+          return (
+            <a
+              href={videoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-cyan-400 hover:text-cyan-300 hover:underline cursor-pointer"
+            >
+              {videoId}
+            </a>
+          );
+        },
       },
       {
         accessorKey: 'uploadDate',
@@ -222,9 +252,11 @@ export const VideosPage: React.FC = () => {
   }, [table.getSelectedRowModel().rows]);
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <>
+      <Tutorial page="videos" />
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex-1">
           <h2 className="text-2xl font-semibold text-white mb-2">
             Video Management
@@ -242,22 +274,23 @@ export const VideosPage: React.FC = () => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-64"
+            data-tour="search-bar"
           />
 
           {appUser?.role === 'admin' && selectedIds.size > 0 && (
-            <Button variant="danger" size="sm" onClick={handleDeleteSelected}>
+            <Button variant="danger" size="sm" onClick={handleDeleteSelected} data-tour="delete-selected">
               Delete Selected ({selectedIds.size})
             </Button>
           )}
 
-          <Button size="md" onClick={() => setIsModalOpen(true)}>
+          <Button size="md" onClick={() => setIsModalOpen(true)} data-tour="add-video-btn">
             + Add Video
           </Button>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 overflow-hidden">
+      <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 overflow-hidden" data-tour="videos-table">
         <DataTable
           table={table}
           emptyMessage="No videos found. Try adjusting your filters."
@@ -295,7 +328,8 @@ export const VideosPage: React.FC = () => {
           />
         </Modal>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 
@@ -357,9 +391,9 @@ const GmvBoostForm: React.FC<GmvBoostFormProps> = ({ video, onSave, onCancel }) 
           id="gmv-enabled"
           checked={isEnabled}
           onChange={(e) => setIsEnabled(e.target.checked)}
-          className="w-5 h-5 text-cyan-600 bg-gray-700 border-gray-600 rounded focus:ring-cyan-500"
+          className="w-5 h-5 text-cyan-500 bg-gray-900 border-2 border-gray-500 rounded focus:ring-2 focus:ring-cyan-500 cursor-pointer"
         />
-        <label htmlFor="gmv-enabled" className="text-white font-medium">
+        <label htmlFor="gmv-enabled" className="text-white font-medium cursor-pointer">
           Enable GMV Boost
         </label>
         <span

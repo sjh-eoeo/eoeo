@@ -25,6 +25,11 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Payments',
   },
   {
+    path: ROUTES.FINANCE,
+    label: 'Finance',
+    requiredRole: ['admin', 'finance'],
+  },
+  {
     path: ROUTES.DOCS,
     label: 'Docs',
   },

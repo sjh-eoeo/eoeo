@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ColumnDef } from '@tanstack/react-table';
 import { useProfileStore } from '../store/useProfileStore';
+import { useBrandStore } from '../store/useBrandStore';
 import { useStorage } from '../hooks/useStorage';
 import { Button } from '../components/ui/Button';
 import { DataTable } from '../components/ui/DataTable';
@@ -15,6 +16,7 @@ interface ProfileWithFiles extends Profile {
 
 export const DocsPage: React.FC = () => {
   const { profiles } = useProfileStore();
+  const { selectedBrand } = useBrandStore();
   const { getFileURL } = useStorage();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -24,15 +26,20 @@ export const DocsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Get profiles with files
+  // Get profiles with files, filtered by brand
   const profilesWithFiles = useMemo(() => {
     return profiles
-      .filter((p) => p.contractFiles && p.contractFiles.length > 0)
+      .filter((p) => {
+        // Filter by brand
+        if (selectedBrand && p.brand !== selectedBrand) return false;
+        // Filter by files
+        return p.contractFiles && p.contractFiles.length > 0;
+      })
       .map((p) => ({
         ...p,
         fileCount: p.contractFiles?.length || 0,
       }));
-  }, [profiles]);
+  }, [profiles, selectedBrand]);
 
   // Filter profiles by search term
   const filteredProfiles = useMemo(() => {

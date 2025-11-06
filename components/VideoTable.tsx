@@ -215,7 +215,7 @@ const VideoDataTable: React.FC<VideoDataTableProps> = ({ videos, onUpdateVideo, 
           <thead className="text-xs text-gray-400 uppercase bg-gray-700/50">
             <tr>
               <th scope="col" className="p-4">
-                <input type="checkbox" onChange={handleSelectAll} checked={filteredAndSortedVideos.length > 0 && selectedIds.size === filteredAndSortedVideos.length} className="w-4 h-4 text-cyan-600 bg-gray-700 border-gray-600 rounded focus:ring-cyan-500"/>
+                <input type="checkbox" onChange={handleSelectAll} checked={filteredAndSortedVideos.length > 0 && selectedIds.size === filteredAndSortedVideos.length} className="w-4 h-4 text-cyan-500 bg-gray-900 border-2 border-gray-500 rounded focus:ring-2 focus:ring-cyan-500 cursor-pointer"/>
               </th>
               {COLUMNS.filter(c => visibleColumns.has(c.id)).map(col => {
                 const isSortable = SORTABLE_KEYS.includes(col.id as SortKey);
@@ -235,7 +235,7 @@ const VideoDataTable: React.FC<VideoDataTableProps> = ({ videos, onUpdateVideo, 
               return (
                 <tr key={video.id} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors">
                   <td className="w-4 p-4">
-                     <input type="checkbox" checked={selectedIds.has(video.id)} onChange={() => handleSelectOne(video.id)} className="w-4 h-4 text-cyan-600 bg-gray-700 border-gray-600 rounded focus:ring-cyan-500"/>
+                     <input type="checkbox" checked={selectedIds.has(video.id)} onChange={() => handleSelectOne(video.id)} className="w-4 h-4 text-cyan-500 bg-gray-900 border-2 border-gray-500 rounded focus:ring-2 focus:ring-cyan-500 cursor-pointer"/>
                   </td>
                   {visibleColumns.has('tiktokId') && <td className="px-6 py-2 font-medium text-white whitespace-nowrap">{video.tiktokId}</td>}
                   {visibleColumns.has('videoId') && <td className="px-6 py-2">{video.videoId}</td>}

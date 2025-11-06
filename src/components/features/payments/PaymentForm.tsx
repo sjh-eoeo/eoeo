@@ -7,6 +7,7 @@ import { formatCurrency } from '../../../lib/utils/currency';
 interface PaymentFormProps {
   tiktokId: string;
   suggestedAmount: number;
+  paymentInfo?: string;
   onSubmit: (data: {
     amount: number;
     paymentDate: string;
@@ -17,6 +18,7 @@ interface PaymentFormProps {
 export const PaymentForm: React.FC<PaymentFormProps> = ({
   tiktokId,
   suggestedAmount,
+  paymentInfo,
   onSubmit,
 }) => {
   const [amount, setAmount] = useState(String(suggestedAmount));
@@ -85,6 +87,13 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
         max={toISODateString()}
         required
       />
+
+      {paymentInfo && (
+        <div className="bg-cyan-900/20 border border-cyan-700/50 rounded-lg p-4">
+          <p className="text-sm font-medium text-cyan-400 mb-1">Payment Information</p>
+          <p className="text-sm text-gray-300">{paymentInfo}</p>
+        </div>
+      )}
 
       <div>
         <label className="block text-sm font-medium text-gray-300 mb-2">

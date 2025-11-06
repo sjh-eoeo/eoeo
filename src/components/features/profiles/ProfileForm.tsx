@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
+import { useProfileStore } from '../../../store/useProfileStore';
+import { useBrandStore } from '../../../store/useBrandStore';
 import { useFirestore } from '../../../hooks/useFirestore';
 import { Input } from '../../ui/Input';
 import { Button } from '../../ui/Button';
+import { Modal } from '../../ui/Modal';
 import { toISODateString } from '../../../lib/utils/date';
 
 interface ProfileFormProps {
@@ -9,6 +12,8 @@ interface ProfileFormProps {
 }
 
 export const ProfileForm: React.FC<ProfileFormProps> = ({ onSuccess }) => {
+  const { profiles } = useProfileStore();
+  const { selectedBrand } = useBrandStore();
   const { setDocument } = useFirestore();
 
   const [tiktokIdInput, setTiktokIdInput] = useState('');
@@ -17,8 +22,14 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ onSuccess }) => {
   const [startDate, setStartDate] = useState(toISODateString());
   const [totalVideoCount, setTotalVideoCount] = useState('96');
   const [numberOfPayments, setNumberOfPayments] = useState('8');
+  const [paymentMethod, setPaymentMethod] = useState<'bank-transfer' | 'paypal'>('bank-transfer');
+  const [bankName, setBankName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [paypalInfo, setPaypalInfo] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateProfile, setDuplicateProfile] = useState<any>(null);
 
   // Extract TikTok ID from URL or input
   const handleTiktokIdChange = (value: string) => {
@@ -63,19 +74,52 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ onSuccess }) => {
       return;
     }
 
+    if (!selectedBrand) {
+      setError('Please select a brand first.');
+      return;
+    }
+
+    // Check for duplicate within the same brand
+    const existing = profiles.find(
+      (p) => p.tiktokId === tiktokId.trim() && p.brand === selectedBrand
+    );
+    if (existing) {
+      setDuplicateProfile(existing);
+      setShowDuplicateModal(true);
+      return;
+    }
+
     setError('');
+    await saveProfile();
+  };
+
+  const saveProfile = async () => {
     setIsSubmitting(true);
 
+    const amount = Number(contractAmount);
+    const videoCount = Number(totalVideoCount);
+    const paymentCount = Number(numberOfPayments);
+
+    // Generate payment info string
+    let paymentInfoText = '';
+    if (paymentMethod === 'bank-transfer') {
+      paymentInfoText = `Bank: ${bankName} | Account: ${accountNumber}`;
+    } else if (paymentMethod === 'paypal') {
+      paymentInfoText = `PayPal: ${paypalInfo}`;
+    }
+
     try {
-      await setDocument('profiles', tiktokId.trim(), {
+      await setDocument('profiles', `${selectedBrand}_${tiktokId.trim()}`, {
         tiktokId: tiktokId.trim(),
+        brand: selectedBrand,
         contractAmount: amount || 0,
         startDate,
         endDate: '',
         totalVideoCount: videoCount,
         paymentCycle: 'weekly' as const,
         numberOfPayments: paymentCount,
-        paymentInfo: '',
+        paymentMethod,
+        paymentInfo: paymentInfoText,
       });
 
       // Reset form
@@ -85,6 +129,10 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ onSuccess }) => {
       setStartDate(toISODateString());
       setTotalVideoCount('96');
       setNumberOfPayments('8');
+      setPaymentMethod('bank-transfer');
+      setBankName('');
+      setAccountNumber('');
+      setPaypalInfo('');
 
       if (onSuccess) {
         onSuccess();
@@ -159,6 +207,61 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ onSuccess }) => {
         />
       </div>
 
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+          Payment Method
+        </label>
+        <div className="flex gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              value="bank-transfer"
+              checked={paymentMethod === 'bank-transfer'}
+              onChange={(e) => setPaymentMethod(e.target.value as 'bank-transfer' | 'paypal')}
+              className="w-4 h-4 text-cyan-500 bg-gray-900 border-gray-600 focus:ring-cyan-500"
+            />
+            <span className="text-sm text-gray-300">Bank Transfer (입금)</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              value="paypal"
+              checked={paymentMethod === 'paypal'}
+              onChange={(e) => setPaymentMethod(e.target.value as 'bank-transfer' | 'paypal')}
+              className="w-4 h-4 text-cyan-500 bg-gray-900 border-gray-600 focus:ring-cyan-500"
+            />
+            <span className="text-sm text-gray-300">PayPal</span>
+          </label>
+        </div>
+      </div>
+
+      {paymentMethod === 'bank-transfer' ? (
+        <div className="grid grid-cols-2 gap-4">
+          <Input
+            label="Bank Name (은행명)"
+            type="text"
+            value={bankName}
+            onChange={(e) => setBankName(e.target.value)}
+            placeholder="e.g., Bank of America"
+          />
+          <Input
+            label="Account Number (계좌번호)"
+            type="text"
+            value={accountNumber}
+            onChange={(e) => setAccountNumber(e.target.value)}
+            placeholder="e.g., 1234567890"
+          />
+        </div>
+      ) : (
+        <Input
+          label="PayPal Information"
+          type="text"
+          value={paypalInfo}
+          onChange={(e) => setPaypalInfo(e.target.value)}
+          placeholder="e.g., email@example.com"
+        />
+      )}
+
       <div className="bg-gray-700/50 p-4 rounded-lg text-sm text-gray-300">
         <h4 className="font-semibold mb-2">Payment Info:</h4>
         <ul className="space-y-1">
@@ -190,6 +293,77 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ onSuccess }) => {
       >
         Add Profile
       </Button>
+
+      {/* Duplicate Warning Modal */}
+      <Modal
+        isOpen={showDuplicateModal}
+        onClose={() => {
+          setShowDuplicateModal(false);
+          setDuplicateProfile(null);
+        }}
+        title="Duplicate Profile Detected"
+        size="md"
+      >
+        <div className="space-y-4 p-2">
+          <div className="bg-yellow-900 bg-opacity-30 border border-yellow-700 rounded-lg p-4">
+            <p className="text-yellow-300 font-medium mb-2">
+              A profile with this TikTok ID already exists:
+            </p>
+            <div className="bg-gray-800 rounded p-3 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-400">TikTok ID:</span>
+                <span className="text-white font-medium">{duplicateProfile?.tiktokId}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Contract Amount:</span>
+                <span className="text-white">${duplicateProfile?.contractAmount.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Start Date:</span>
+                <span className="text-white">{duplicateProfile?.startDate}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Total Videos:</span>
+                <span className="text-white">{duplicateProfile?.totalVideoCount}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Number of Payments:</span>
+                <span className="text-white">{duplicateProfile?.numberOfPayments}</span>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-gray-300 text-sm">
+            Do you want to overwrite this profile with the new data?
+          </p>
+
+          <div className="flex gap-3">
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={() => {
+                setShowDuplicateModal(false);
+                setDuplicateProfile(null);
+              }}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={async () => {
+                setShowDuplicateModal(false);
+                setDuplicateProfile(null);
+                await saveProfile();
+              }}
+              className="flex-1"
+            >
+              Overwrite
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </form>
   );
 };

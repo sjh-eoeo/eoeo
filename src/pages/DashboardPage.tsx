@@ -5,6 +5,7 @@ import { usePaymentStore } from '../store/usePaymentStore';
 import { useBrandStore } from '../store/useBrandStore';
 import { formatCurrency } from '../lib/utils/currency';
 import { Badge } from '../components/ui/Badge';
+import { Tutorial } from '../components/ui/Tutorial';
 
 export const DashboardPage: React.FC = () => {
   const { videos } = useVideoStore();
@@ -19,20 +20,13 @@ export const DashboardPage: React.FC = () => {
 
   const filteredProfiles = useMemo(() => {
     if (!selectedBrand) return profiles;
-    const relevantProfileIds = new Set(filteredVideos.map((v) => v.tiktokId));
-    const allProfileIdsWithVideos = new Set(videos.map((v) => v.tiktokId));
-    return profiles.filter(
-      (p) =>
-        relevantProfileIds.has(p.tiktokId) ||
-        !allProfileIdsWithVideos.has(p.tiktokId)
-    );
-  }, [profiles, filteredVideos, videos, selectedBrand]);
+    return profiles.filter((p) => p.brand === selectedBrand);
+  }, [profiles, selectedBrand]);
 
   const filteredPayments = useMemo(() => {
     if (!selectedBrand) return payments;
-    const relevantProfileIds = new Set(filteredVideos.map((v) => v.tiktokId));
-    return payments.filter((p) => relevantProfileIds.has(p.tiktokId));
-  }, [payments, filteredVideos, selectedBrand]);
+    return payments.filter((p) => p.brand === selectedBrand);
+  }, [payments, selectedBrand]);
 
   const stats = useMemo(() => {
     const totalViews = filteredVideos.reduce((acc, v) => acc + (v.views || 0), 0);
@@ -67,31 +61,20 @@ export const DashboardPage: React.FC = () => {
     };
   }, [filteredVideos, filteredProfiles, filteredPayments]);
 
-  // Top performing profiles
+  // Top performing profiles by video count
   const topProfiles = useMemo(() => {
     const profileStats = filteredProfiles.map((profile) => {
       const profileVideos = filteredVideos.filter(
         (v) => v.tiktokId === profile.tiktokId
       );
-      const totalViews = profileVideos.reduce(
-        (acc, v) => acc + (v.views || 0),
-        0
-      );
-      const totalLikes = profileVideos.reduce(
-        (acc, v) => acc + (v.likes || 0),
-        0
-      );
       return {
         profile,
         videoCount: profileVideos.length,
-        totalViews,
-        totalLikes,
-        avgViews:
-          profileVideos.length > 0 ? totalViews / profileVideos.length : 0,
+        tiktokProfileUrl: profileVideos[0]?.tiktokProfileUrl || `https://www.tiktok.com/@${profile.tiktokId}`,
       };
     });
 
-    return profileStats.sort((a, b) => b.totalViews - a.totalViews).slice(0, 5);
+    return profileStats.sort((a, b) => b.videoCount - a.videoCount).slice(0, 5);
   }, [filteredProfiles, filteredVideos]);
 
   // Recent videos
@@ -105,9 +88,11 @@ export const DashboardPage: React.FC = () => {
   }, [filteredVideos]);
 
   return (
-    <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <>
+      <Tutorial page="dashboard" />
+      <div className="space-y-6">
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="summary-cards">
         <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6">
           <h3 className="text-sm text-gray-400 mb-2">Total Profiles</h3>
           <p className="text-3xl font-bold text-white">
@@ -136,7 +121,7 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       {/* Payment Summary */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" data-tour="payment-summary">
         <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6">
           <h3 className="text-sm text-gray-400 mb-2">Total Contract</h3>
           <p className="text-2xl font-bold text-white">
@@ -164,50 +149,40 @@ export const DashboardPage: React.FC = () => {
 
       {/* Two Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Performing Profiles */}
-        <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6">
+        {/* Top Performing Profiles by Video Count */}
+        <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6" data-tour="top-performers">
           <h3 className="text-xl font-semibold text-white mb-4">
             Top Performing Profiles
           </h3>
           {topProfiles.length > 0 ? (
             <div className="space-y-3">
               {topProfiles.map((item, index) => (
-                <div
+                <a
                   key={item.profile.tiktokId}
-                  className="bg-gray-700/50 p-4 rounded-lg"
+                  href={item.tiktokProfileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block bg-gray-700/50 p-4 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-400 text-sm font-semibold">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-cyan-400 text-lg font-bold w-8">
                         #{index + 1}
                       </span>
-                      <span className="font-medium text-white">
-                        {item.profile.tiktokId}
-                      </span>
+                      <div>
+                        <p className="font-medium text-cyan-400 hover:text-cyan-300">
+                          @{item.profile.tiktokId}
+                        </p>
+                        <p className="text-sm text-gray-400">
+                          {item.videoCount} video{item.videoCount !== 1 ? 's' : ''}
+                        </p>
+                      </div>
                     </div>
-                    <Badge variant="info">{item.videoCount} videos</Badge>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-sm">
-                    <div>
-                      <p className="text-gray-400">Total Views</p>
-                      <p className="font-semibold text-white">
-                        {item.totalViews.toLocaleString()}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Avg Views</p>
-                      <p className="font-semibold text-white">
-                        {Math.round(item.avgViews).toLocaleString()}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Total Likes</p>
-                      <p className="font-semibold text-white">
-                        {item.totalLikes.toLocaleString()}
-                      </p>
+                    <div className="text-right">
+                      <Badge variant="success">{item.profile.brand}</Badge>
                     </div>
                   </div>
-                </div>
+                </a>
               ))}
             </div>
           ) : (
@@ -218,46 +193,50 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         {/* Recent Videos */}
-        <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6">
+        <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6" data-tour="recent-videos">
           <h3 className="text-xl font-semibold text-white mb-4">
             Recent Videos
           </h3>
           {recentVideos.length > 0 ? (
             <div className="space-y-3">
-              {recentVideos.map((video) => (
-                <div
-                  key={video.id}
-                  className="bg-gray-700/50 p-4 rounded-lg"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-white">
-                      {video.tiktokId}
-                    </span>
-                    <span className="text-sm text-gray-400">
-                      {video.uploadDate}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex gap-4">
-                      <div>
-                        <span className="text-gray-400">Views: </span>
-                        <span className="font-semibold text-white">
-                          {(video.views || 0).toLocaleString()}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">Likes: </span>
-                        <span className="font-semibold text-white">
-                          {(video.likes || 0).toLocaleString()}
-                        </span>
-                      </div>
+              {recentVideos.map((video) => {
+                const profileUrl = video.tiktokProfileUrl || `https://www.tiktok.com/@${video.tiktokId}`;
+                const videoUrl = video.videoUrl || `https://www.tiktok.com/@${video.tiktokId}/video/${video.videoId}`;
+                
+                return (
+                  <div
+                    key={video.id}
+                    className="bg-gray-700/50 p-4 rounded-lg hover:bg-gray-700/70 transition-colors"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <a
+                        href={profileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-cyan-400 hover:text-cyan-300 hover:underline cursor-pointer"
+                      >
+                        {video.tiktokId}
+                      </a>
+                      <span className="text-sm text-gray-400">
+                        {video.uploadDate}
+                      </span>
                     </div>
-                    <Badge variant="success">
-                      {video.videoId || 'No ID'}
-                    </Badge>
+                    <div className="flex items-center justify-between text-sm">
+                      <a
+                        href={videoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-cyan-400 hover:text-cyan-300 hover:underline cursor-pointer"
+                      >
+                        Video #{video.videoId}
+                      </a>
+                      <Badge variant="success">
+                        {video.brand}
+                      </Badge>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="text-gray-400 text-center py-8">
@@ -266,6 +245,7 @@ export const DashboardPage: React.FC = () => {
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 };

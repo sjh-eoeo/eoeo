@@ -5,9 +5,19 @@ import { useProfileStore } from '../store/useProfileStore';
 import { usePaymentStore } from '../store/usePaymentStore';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { DataTable } from '../components/ui/DataTable';
 import { formatCurrency } from '../lib/utils/currency';
 import { db } from '../lib/firebase/config';
 import { collection, getDocs, deleteDoc } from 'firebase/firestore';
+import { useRealtimeCollection } from '../hooks/useRealtimeCollection';
+import { useFirestore } from '../hooks/useFirestore';
+import { createColumnHelper, useReactTable, getCoreRowModel } from '@tanstack/react-table';
+import { Tutorial } from '../components/ui/Tutorial';
+import type { AppUser, UserStatus, UserRole } from '../types';
+
+const ADMIN_EMAIL = 'sjh@egongegong.com';
+
+const columnHelper = createColumnHelper<AppUser>();
 
 export const AdminPage: React.FC = () => {
   const { appUser } = useAuthStore();
@@ -15,6 +25,12 @@ export const AdminPage: React.FC = () => {
   const { profiles } = useProfileStore();
   const { payments } = usePaymentStore();
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Fetch all users
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const { updateDocument } = useFirestore();
+
+  useRealtimeCollection<AppUser>('users', setUsers);
 
   const systemStats = useMemo(() => {
     const totalViews = videos.reduce((acc, v) => acc + (v.views || 0), 0);
@@ -92,6 +108,102 @@ export const AdminPage: React.FC = () => {
     }
   };
 
+  // Check if user is admin
+  if (!appUser || appUser.email !== ADMIN_EMAIL) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center space-y-4 p-8 bg-gray-800 rounded-lg border border-gray-700">
+          <div className="text-red-400 text-6xl">🚫</div>
+          <h2 className="text-2xl font-bold text-white">Access Denied</h2>
+          <p className="text-gray-400">
+            You don't have permission to access this page.
+          </p>
+          <p className="text-sm text-gray-500">
+            Admin access is restricted to authorized accounts only.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle user status update
+  const handleStatusChange = async (uid: string, newStatus: UserStatus) => {
+    try {
+      await updateDocument('users', uid, { status: newStatus });
+    } catch (error) {
+      console.error('Failed to update user status:', error);
+      alert('Failed to update user status');
+    }
+  };
+
+  // Handle user role update
+  const handleRoleChange = async (uid: string, newRole: UserRole) => {
+    try {
+      await updateDocument('users', uid, { role: newRole });
+    } catch (error) {
+      console.error('Failed to update user role:', error);
+      alert('Failed to update user role');
+    }
+  };
+
+  // User management table columns
+  const userColumns = [
+    columnHelper.accessor('email', {
+      header: 'Email',
+      cell: (info) => (
+        <div className="text-sm text-white">{info.getValue() || 'N/A'}</div>
+      ),
+    }),
+    columnHelper.accessor('status', {
+      header: 'Status',
+      cell: (info) => {
+        const user = info.row.original;
+        const status = info.getValue();
+        return (
+          <select
+            value={status}
+            onChange={(e) => handleStatusChange(user.uid, e.target.value as UserStatus)}
+            className="bg-gray-700 border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-1 focus:ring-cyan-500"
+          >
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        );
+      },
+    }),
+    columnHelper.accessor('role', {
+      header: 'Role',
+      cell: (info) => {
+        const user = info.row.original;
+        const role = info.getValue();
+        return (
+          <select
+            value={role}
+            onChange={(e) => handleRoleChange(user.uid, e.target.value as UserRole)}
+            className="bg-gray-700 border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-1 focus:ring-cyan-500"
+          >
+            <option value="user">User</option>
+            <option value="finance">Finance</option>
+            <option value="admin">Admin</option>
+          </select>
+        );
+      },
+    }),
+    columnHelper.accessor('uid', {
+      header: 'User ID',
+      cell: (info) => (
+        <div className="text-xs text-gray-400 font-mono">{info.getValue()}</div>
+      ),
+    }),
+  ];
+
+  const userTable = useReactTable({
+    data: users,
+    columns: userColumns,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
   if (!appUser || appUser.role !== 'admin') {
     return (
       <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6">
@@ -101,9 +213,11 @@ export const AdminPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Admin Header */}
-      <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6">
+    <>
+      <Tutorial page="admin" />
+      <div className="space-y-6">
+        {/* Admin Header */}
+        <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-semibold text-white mb-2">
@@ -125,6 +239,23 @@ export const AdminPage: React.FC = () => {
             </Button>
             <Badge variant="danger">ADMIN</Badge>
           </div>
+        </div>
+      </div>
+
+      {/* User Management */}
+      <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6">
+        <h3 className="text-xl font-semibold text-white mb-4">
+          User Management
+        </h3>
+        <p className="text-sm text-gray-400 mb-4">
+          Manage user access and permissions. Users with "Approved" status can access the system.
+          Finance role can only view Finance page (read-only). Admins can delete data across all pages.
+        </p>
+        <div className="bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
+          <DataTable
+            table={userTable}
+            emptyMessage="No users found."
+          />
         </div>
       </div>
 
@@ -272,6 +403,7 @@ export const AdminPage: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 };

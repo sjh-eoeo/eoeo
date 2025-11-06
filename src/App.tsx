@@ -5,6 +5,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { VideosPage } from './pages/VideosPage';
 import { ProfilesPage } from './pages/ProfilesPage';
 import { PaymentsPage } from './pages/PaymentsPage';
+import { FinancePage } from './pages/FinancePage';
 import { DocsPage } from './pages/DocsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminPage } from './pages/AdminPage';
@@ -22,6 +23,7 @@ const App: React.FC = () => {
         <Route path={ROUTES.VIDEOS} element={<VideosPage />} />
         <Route path={ROUTES.PROFILES} element={<ProfilesPage />} />
         <Route path={ROUTES.PAYMENTS} element={<PaymentsPage />} />
+        <Route path={ROUTES.FINANCE} element={<FinancePage />} />
         <Route path={ROUTES.DOCS} element={<DocsPage />} />
         <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
         <Route path={ROUTES.ADMIN} element={<AdminPage />} />

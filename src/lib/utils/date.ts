@@ -34,7 +34,7 @@ export function getDaysUntil(targetDate: Date | null): { text: string; color: st
 }
 
 /**
- * Calculate overdue days
+ * Calculate overdue days or days until due
  */
 export function getOverdueDays(dueDate: Date | null): { text: string; color: string } {
   if (!dueDate) return { text: 'N/A', color: 'text-gray-400' };
@@ -42,13 +42,19 @@ export function getOverdueDays(dueDate: Date | null): { text: string; color: str
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
-  const diffTime = today.getTime() - dueDate.getTime();
-  const overdueDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-  if (overdueDays > 0) return { text: `${overdueDays} day(s) overdue`, color: 'text-red-400' };
-  if (overdueDays === 0) return { text: 'Due Today', color: 'text-orange-400' };
+  const dueDateCopy = new Date(dueDate);
+  dueDateCopy.setHours(0, 0, 0, 0);
   
-  return { text: 'N/A', color: 'text-gray-400' };
+  const diffTime = today.getTime() - dueDateCopy.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays > 0) return { text: `${diffDays} day(s) overdue`, color: 'text-red-400' };
+  if (diffDays === 0) return { text: 'Due Today', color: 'text-orange-400' };
+  
+  // Future date - show "In X days"
+  const daysUntil = -diffDays;
+  if (daysUntil <= 3) return { text: `In ${daysUntil} day(s)`, color: 'text-yellow-400' };
+  return { text: `In ${daysUntil} day(s)`, color: 'text-green-400' };
 }
 
 /**

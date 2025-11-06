@@ -13,6 +13,7 @@ import { ProfileForm } from '../components/features/profiles/ProfileForm';
 import { useTableState, createTable } from '../hooks/useTableState';
 import { useFirestore } from '../hooks/useFirestore';
 import { useStorage } from '../hooks/useStorage';
+import { Tutorial } from '../components/ui/Tutorial';
 import type { Profile } from '../types';
 import { formatCurrency } from '../lib/utils/currency';
 
@@ -29,6 +30,7 @@ export const ProfilesPage: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [hideSampleData, setHideSampleData] = useState(false);
 
   const videoCountsByProfile = useMemo(() => {
     const counts = new Map<string, number>();
@@ -50,22 +52,65 @@ export const ProfilesPage: React.FC = () => {
   }, [payments]);
 
   const filteredProfiles = useMemo(() => {
-    // Always show all profiles, don't filter by brand
-    // This ensures newly added profiles are always visible
     let result = [...profiles];
 
-    // Filter by search term only
+    // Filter by brand
+    if (selectedBrand) {
+      result = result.filter((p) => p.brand === selectedBrand);
+    }
+
+    // Filter by search term
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       result = result.filter((p) => p.tiktokId.toLowerCase().includes(term));
     }
 
     return result;
-  }, [profiles, searchTerm]);
+  }, [profiles, selectedBrand, searchTerm]);
 
-  const handleUpdateAmount = async (tiktokId: string, amount: number) => {
+  // Profiles requiring shipping confirmation (tracking added 5+ days ago, not confirmed)
+  const shippingConfirmationRequired = useMemo(() => {
+    const now = new Date();
+    const fiveDaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
+
+    const actualRequiredProfiles = filteredProfiles
+      .filter((profile) => {
+        // Skip if already confirmed
+        if (profile.shippingConfirmed) return false;
+        
+        // Check if any shipping info was added more than 5 days ago
+        if (profile.shippingInfo && profile.shippingInfo.length > 0) {
+          return profile.shippingInfo.some((info) => {
+            if (!info.trackingNumber || !info.addedAt) return false;
+            const addedDate = new Date(info.addedAt);
+            return addedDate <= fiveDaysAgo;
+          });
+        }
+        return false;
+      })
+      .map((profile) => {
+        // Find the oldest tracking entry
+        const oldestTracking = profile.shippingInfo!
+          .filter((info) => info.trackingNumber && info.addedAt)
+          .sort((a, b) => new Date(a.addedAt!).getTime() - new Date(b.addedAt!).getTime())[0];
+        
+        const addedDate = new Date(oldestTracking.addedAt!);
+        const daysSinceAdded = Math.floor((now.getTime() - addedDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        return {
+          ...profile,
+          oldestTrackingDate: addedDate,
+          daysSinceTracking: daysSinceAdded,
+        };
+      });
+
+    return actualRequiredProfiles;
+  }, [filteredProfiles, hideSampleData]);
+
+  const handleUpdateAmount = async (profile: Profile, amount: number) => {
     try {
-      await updateDocument('profiles', tiktokId, { contractAmount: amount });
+      const documentId = `${profile.brand}_${profile.tiktokId}`;
+      await updateDocument('profiles', documentId, { contractAmount: amount });
     } catch (error) {
       console.error('Error updating amount:', error);
       alert('Failed to update contract amount');
@@ -74,6 +119,12 @@ export const ProfilesPage: React.FC = () => {
 
   const handleDeleteSelected = async () => {
     if (selectedIds.size === 0) return;
+    
+    // Check if user is admin
+    if (appUser?.role !== 'admin') {
+      alert('Only admins can delete profiles');
+      return;
+    }
     
     if (!confirm(`Delete ${selectedIds.size} profile(s)?`)) return;
 
@@ -86,6 +137,25 @@ export const ProfilesPage: React.FC = () => {
     }
   };
 
+  const handleConfirmShipping = async (profile: any) => {
+    try {
+      // If it's the sample data, just hide it
+      if (profile.tiktokId === 'sample_user_demo') {
+        setHideSampleData(true);
+        return;
+      }
+
+      const documentId = `${profile.brand}_${profile.tiktokId}`;
+      await updateDocument('profiles', documentId, {
+        shippingConfirmed: true,
+        shippingConfirmedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Error confirming shipping:', error);
+      alert('Failed to confirm shipping');
+    }
+  };
+
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     profile: Profile
@@ -95,7 +165,7 @@ export const ProfilesPage: React.FC = () => {
 
     setUploadingId(profile.tiktokId);
     const timestamp = new Date().toISOString();
-    const path = `contracts/${profile.tiktokId}/${timestamp}_${file.name}`;
+    const path = `contracts/${profile.brand}/${profile.tiktokId}/${timestamp}_${file.name}`;
 
     try {
       const result = await uploadFile(path, file);
@@ -110,7 +180,9 @@ export const ProfilesPage: React.FC = () => {
         uploadedAt: timestamp,
       };
       
-      await updateDocument('profiles', profile.tiktokId, {
+      // Use correct document ID: {brand}_{tiktokId}
+      const documentId = `${profile.brand}_${profile.tiktokId}`;
+      await updateDocument('profiles', documentId, {
         contractFiles: [...existingFiles, newFile],
       });
       
@@ -133,7 +205,7 @@ export const ProfilesPage: React.FC = () => {
               type="checkbox"
               checked={table.getIsAllRowsSelected()}
               onChange={table.getToggleAllRowsSelectedHandler()}
-              className="w-4 h-4 text-cyan-600 bg-gray-700 border-gray-600 rounded focus:ring-cyan-500"
+              className="w-4 h-4 text-cyan-500 bg-gray-900 border-2 border-gray-500 rounded focus:ring-2 focus:ring-cyan-500 cursor-pointer"
             />
           ) : null,
         cell: ({ row }) =>
@@ -142,7 +214,7 @@ export const ProfilesPage: React.FC = () => {
               type="checkbox"
               checked={row.getIsSelected()}
               onChange={row.getToggleSelectedHandler()}
-              className="w-4 h-4 text-cyan-600 bg-gray-700 border-gray-600 rounded focus:ring-cyan-500"
+              className="w-4 h-4 text-cyan-500 bg-gray-900 border-2 border-gray-500 rounded focus:ring-2 focus:ring-cyan-500 cursor-pointer"
             />
           ) : null,
         size: 50,
@@ -193,7 +265,7 @@ export const ProfilesPage: React.FC = () => {
                         )} to ${formatCurrency(newAmount)}?`
                       )
                     ) {
-                      handleUpdateAmount(row.original.tiktokId, newAmount);
+                      handleUpdateAmount(row.original, newAmount);
                     } else {
                       setAmount(String(row.original.contractAmount));
                     }
@@ -280,7 +352,8 @@ export const ProfilesPage: React.FC = () => {
                       `Change total videos from ${row.original.totalVideoCount} to ${newValue}?`
                     )
                   ) {
-                    updateDocument('profiles', row.original.tiktokId, {
+                    const documentId = `${row.original.brand}_${row.original.tiktokId}`;
+                    updateDocument('profiles', documentId, {
                       totalVideoCount: newValue,
                     });
                   } else {
@@ -320,7 +393,8 @@ export const ProfilesPage: React.FC = () => {
                       `Change number of payments from ${row.original.numberOfPayments} to ${newValue}?`
                     )
                   ) {
-                    updateDocument('profiles', row.original.tiktokId, {
+                    const documentId = `${row.original.brand}_${row.original.tiktokId}`;
+                    updateDocument('profiles', documentId, {
                       numberOfPayments: newValue,
                     });
                   } else {
@@ -362,8 +436,242 @@ export const ProfilesPage: React.FC = () => {
         },
         size: 180,
       },
+      {
+        id: 'shippingInfo',
+        header: 'Shipping Info',
+        cell: ({ row }) => {
+          const [shippingList, setShippingList] = useState(
+            row.original.shippingInfo || []
+          );
+          const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+
+          const handleAdd = () => {
+            const newList = [...shippingList, { carrier: '', trackingNumber: '', addedAt: new Date().toISOString() }];
+            setShippingList(newList);
+            const documentId = `${row.original.brand}_${row.original.tiktokId}`;
+            updateDocument('profiles', documentId, {
+              shippingInfo: newList,
+            });
+          };
+
+          const handleUpdate = (index: number, field: 'carrier' | 'trackingNumber', value: string) => {
+            const newList = [...shippingList];
+            newList[index][field] = value;
+            // If tracking number is being added for the first time, set addedAt
+            if (field === 'trackingNumber' && value && !newList[index].addedAt) {
+              newList[index].addedAt = new Date().toISOString();
+            }
+            setShippingList(newList);
+            const documentId = `${row.original.brand}_${row.original.tiktokId}`;
+            updateDocument('profiles', documentId, {
+              shippingInfo: newList,
+            });
+          };
+
+          const handleDelete = (index: number) => {
+            const newList = shippingList.filter((_, i) => i !== index);
+            setShippingList(newList);
+            const documentId = `${row.original.brand}_${row.original.tiktokId}`;
+            updateDocument('profiles', documentId, {
+              shippingInfo: newList,
+            });
+          };
+
+          const handleCopy = async (trackingNumber: string, index: number) => {
+            try {
+              await navigator.clipboard.writeText(trackingNumber);
+              setCopiedIndex(index);
+              setTimeout(() => setCopiedIndex(null), 2000);
+            } catch (error) {
+              console.error('Failed to copy:', error);
+            }
+          };
+
+          const handleSearch = (carrier: string, trackingNumber: string) => {
+            const searchQuery = carrier 
+              ? `${carrier} ${trackingNumber}` 
+              : trackingNumber;
+            window.open(`https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`, '_blank');
+          };
+
+          const [carrierSearch, setCarrierSearch] = React.useState<Record<number, string>>({});
+          
+          const carriers = [
+            'USPS', 'UPS', 'FedEx', 'Amazon Logistics', 'DHL', 'UniUni', 'OnTrac', 
+            'LaserShip', 'GOFO', 'ShipBob', 'Pitney Bowes', 'APC', 'Newgistics', 
+            'Lone Star Overnight', 'Eastern Connection', 'R+L Carriers', 'Old Dominion',
+            'XPO Logistics', 'Estes Express', 'YRC Freight', 'ABF Freight', 'Saia',
+            'TForce Freight', 'Averitt Express', 'Southeastern Freight', 'Central Transport',
+            'Dayton Freight', 'Holland', 'New Penn', 'Roadrunner', 'Ward Trucking',
+            'A Duie Pyle', 'Forward Air', 'LSO', 'Pilot Freight', 'Pitt Ohio'
+          ];
+
+          return (
+            <div className="space-y-2 min-w-[280px]">
+              {shippingList.map((item, index) => (
+                <div key={index} className="space-y-1">
+                  <div className="flex gap-1">
+                    <div className="relative w-20">
+                      <input
+                        type="text"
+                        value={carrierSearch[index] !== undefined ? carrierSearch[index] : item.carrier}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setCarrierSearch(prev => ({ ...prev, [index]: value }));
+                        }}
+                        onBlur={() => {
+                          if (carrierSearch[index] !== undefined && carrierSearch[index] !== item.carrier) {
+                            handleUpdate(index, 'carrier', carrierSearch[index]);
+                          }
+                          setCarrierSearch(prev => {
+                            const newState = { ...prev };
+                            delete newState[index];
+                            return newState;
+                          });
+                        }}
+                        placeholder="Carrier"
+                        className="w-full bg-gray-700 border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-1 focus:ring-cyan-500"
+                        list={`carriers-${index}`}
+                      />
+                      <datalist id={`carriers-${index}`}>
+                        {carriers
+                          .filter(c => c.toLowerCase().includes((carrierSearch[index] || item.carrier || '').toLowerCase()))
+                          .map(carrier => (
+                            <option key={carrier} value={carrier} />
+                          ))
+                        }
+                      </datalist>
+                    </div>
+                    <input
+                      type="text"
+                      value={item.trackingNumber}
+                      onChange={(e) => handleUpdate(index, 'trackingNumber', e.target.value)}
+                      placeholder="운송장번호"
+                      className="flex-1 bg-gray-700 border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-1 focus:ring-cyan-500"
+                    />
+                    <button
+                      onClick={() => handleDelete(index)}
+                      className="px-2 py-1 text-xs rounded bg-red-700 hover:bg-red-600 text-white"
+                      title="Delete"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  {item.trackingNumber && (
+                    <div className="flex gap-1 pl-[84px]">
+                      <button
+                        onClick={() => handleCopy(item.trackingNumber, index)}
+                        className="flex-1 text-xs px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white transition-colors"
+                      >
+                        {copiedIndex === index ? '✓' : 'Copy'}
+                      </button>
+                      <button
+                        onClick={() => handleSearch(item.carrier, item.trackingNumber)}
+                        className="flex-1 text-xs px-2 py-0.5 rounded bg-cyan-700 hover:bg-cyan-600 text-white transition-colors"
+                      >
+                        Search
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              <button
+                onClick={handleAdd}
+                className="w-full text-xs px-2 py-1.5 rounded border border-dashed border-gray-600 text-gray-400 hover:border-cyan-500 hover:text-cyan-400 transition-colors"
+              >
+                + Add Tracking
+              </button>
+            </div>
+          );
+        },
+        size: 320,
+      },
     ],
     [appUser, videoCountsByProfile, paymentStatsByProfile, uploadingId]
+  );
+
+  // Shipping confirmation table columns
+  const shippingConfirmationColumns = useMemo<ColumnDef<typeof shippingConfirmationRequired[0]>[]>(
+    () => [
+      {
+        id: 'confirm',
+        header: 'Confirm',
+        cell: ({ row }) => (
+          <input
+            type="checkbox"
+            onChange={() => handleConfirmShipping(row.original)}
+            className="w-4 h-4 text-cyan-500 bg-gray-900 border-2 border-gray-500 rounded focus:ring-2 focus:ring-cyan-500 cursor-pointer"
+          />
+        ),
+        size: 80,
+      },
+      {
+        accessorKey: 'tiktokId',
+        header: 'TikTok ID',
+        cell: (info) => (
+          <span className="font-medium text-white whitespace-nowrap">
+            {info.getValue() as string}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'brand',
+        header: 'Brand',
+        cell: (info) => (
+          <span className="text-cyan-400 font-medium">
+            {info.getValue() as string}
+          </span>
+        ),
+      },
+      {
+        id: 'daysSince',
+        header: 'Days Since Tracking',
+        cell: ({ row }) => (
+          <span className="font-semibold text-orange-400">
+            D+{row.original.daysSinceTracking}
+          </span>
+        ),
+      },
+      {
+        id: 'trackingInfo',
+        header: 'Tracking Info',
+        cell: ({ row }) => (
+          <div className="text-sm space-y-2">
+            {row.original.shippingInfo?.map((info, idx) => (
+              info.trackingNumber && (
+                <div key={idx} className="flex items-center gap-2">
+                  <div className="text-gray-300">
+                    <span className="text-gray-400">{info.carrier || 'N/A'}:</span> {info.trackingNumber}
+                  </div>
+                  <button
+                    onClick={() => {
+                      const searchQuery = info.carrier 
+                        ? `${info.carrier} ${info.trackingNumber}` 
+                        : info.trackingNumber;
+                      window.open(`https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`, '_blank');
+                    }}
+                    className="px-2 py-0.5 text-xs bg-cyan-600 hover:bg-cyan-700 text-white rounded transition-colors"
+                    title="Search on Google"
+                  >
+                    🔍
+                  </button>
+                </div>
+              )
+            ))}
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'oldestTrackingDate',
+        header: 'Tracking Added',
+        cell: (info) => (
+          <span className="whitespace-nowrap text-sm text-gray-400">
+            {new Date(info.getValue() as Date).toISOString().split('T')[0]}
+          </span>
+        ),
+      },
+    ],
+    [handleConfirmShipping]
   );
 
   const tableState = useTableState();
@@ -375,6 +683,15 @@ export const ProfilesPage: React.FC = () => {
     getRowId: (row) => (row as Profile).tiktokId,
   });
 
+  const shippingTableState = useTableState({ initialPageSize: 10 });
+  const shippingTable = createTable({
+    data: shippingConfirmationRequired,
+    columns: shippingConfirmationColumns,
+    state: shippingTableState,
+    enableRowSelection: false,
+    getRowId: (row) => (row as any).tiktokId,
+  });
+
   // Sync selected rows with state
   React.useEffect(() => {
     const selectedRowIds = new Set(
@@ -384,7 +701,35 @@ export const ProfilesPage: React.FC = () => {
   }, [table.getSelectedRowModel().rows]);
 
   return (
-    <div className="space-y-4">
+    <>
+      <Tutorial page="profiles" />
+      <div className="space-y-6 w-full max-w-full">
+        {/* Shipping Confirmation Required */}
+        <div className="bg-yellow-900/20 border-2 border-yellow-500 rounded-lg p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-3xl">📦</span>
+          <div className="flex-1">
+            <h3 className="text-xl font-semibold text-yellow-400">
+              Action Required: Shipping Confirmation
+            </h3>
+            <p className="text-sm text-gray-300">
+              Tracking numbers were added 5+ days ago. Please confirm delivery status!
+            </p>
+          </div>
+          {shippingConfirmationRequired.length > 0 && (
+            <div className="px-3 py-1 bg-yellow-500 text-gray-900 text-sm font-semibold rounded-full">
+              {shippingConfirmationRequired.length} pending
+            </div>
+          )}
+        </div>
+        <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 overflow-x-auto">
+          <DataTable
+            table={shippingTable}
+            emptyMessage="All shipments confirmed. Great job! 👍"
+          />
+        </div>
+      </div>
+
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex-1">
@@ -419,7 +764,7 @@ export const ProfilesPage: React.FC = () => {
       </div>
 
       {/* Table */}
-      <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 overflow-hidden">
+      <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 overflow-x-auto w-full">
         <DataTable
           table={table}
           emptyMessage="No profiles found. Try adjusting your filters."
@@ -435,6 +780,7 @@ export const ProfilesPage: React.FC = () => {
       >
         <ProfileForm onSuccess={() => setIsModalOpen(false)} />
       </Modal>
-    </div>
+      </div>
+    </>
   );
 };
