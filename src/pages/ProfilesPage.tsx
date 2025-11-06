@@ -29,6 +29,8 @@ export const ProfilesPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [hideSampleData, setHideSampleData] = useState(false);
 
@@ -193,6 +195,187 @@ export const ProfilesPage: React.FC = () => {
     } finally {
       setUploadingId(null);
     }
+  };
+
+  // Edit Profile Form Component
+  const EditProfileForm: React.FC<{
+    profile: Profile;
+    onSuccess: () => void;
+    onCancel: () => void;
+  }> = ({ profile, onSuccess, onCancel }) => {
+    const [startDate, setStartDate] = useState(profile.startDate);
+    const [paymentMethod, setPaymentMethod] = useState<'bank-transfer' | 'paypal'>(
+      profile.paymentMethod || 'bank-transfer'
+    );
+    const [bankName, setBankName] = useState('');
+    const [accountNumber, setAccountNumber] = useState('');
+    const [paypalInfo, setPaypalInfo] = useState('');
+
+    // Parse existing payment info
+    React.useEffect(() => {
+      if (profile.paymentInfo) {
+        if (profile.paymentMethod === 'bank-transfer') {
+          // Parse "Bank: XXX | Account: YYY"
+          const parts = profile.paymentInfo.split('|');
+          if (parts.length >= 2) {
+            const bank = parts[0].replace('Bank:', '').trim();
+            const account = parts[1].replace('Account:', '').trim();
+            setBankName(bank);
+            setAccountNumber(account);
+          }
+        } else if (profile.paymentMethod === 'paypal') {
+          // Parse "PayPal: XXX"
+          const paypal = profile.paymentInfo.replace('PayPal:', '').trim();
+          setPaypalInfo(paypal);
+        }
+      }
+    }, [profile]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      
+      // Generate payment info string
+      let paymentInfoText = '';
+      if (paymentMethod === 'bank-transfer') {
+        paymentInfoText = `Bank: ${bankName} | Account: ${accountNumber}`;
+      } else if (paymentMethod === 'paypal') {
+        paymentInfoText = `PayPal: ${paypalInfo}`;
+      }
+
+      try {
+        const documentId = `${profile.brand}_${profile.tiktokId}`;
+        await updateDocument('profiles', documentId, {
+          startDate,
+          paymentMethod,
+          paymentInfo: paymentInfoText,
+        });
+        onSuccess();
+      } catch (error) {
+        console.error('Error updating profile:', error);
+        alert('Failed to update profile');
+      }
+    };
+
+    return (
+      <form onSubmit={handleSubmit} className="space-y-6 p-2">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Start Date
+            </label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              required
+              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+            />
+          </div>
+
+          <div className="border-t border-gray-600 pt-4">
+            <h3 className="text-lg font-semibold text-white mb-4">Payment Information</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Payment Method
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('bank-transfer')}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      paymentMethod === 'bank-transfer'
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    Bank Transfer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('paypal')}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      paymentMethod === 'paypal'
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    PayPal
+                  </button>
+                </div>
+              </div>
+
+              {paymentMethod === 'bank-transfer' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Bank Name
+                    </label>
+                    <input
+                      type="text"
+                      value={bankName}
+                      onChange={(e) => setBankName(e.target.value)}
+                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                      placeholder="e.g., Bank of America"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Account Number
+                    </label>
+                    <input
+                      type="text"
+                      value={accountNumber}
+                      onChange={(e) => setAccountNumber(e.target.value)}
+                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                      placeholder="Account number"
+                      required
+                    />
+                  </div>
+                </>
+              )}
+
+              {paymentMethod === 'paypal' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    PayPal Email or ID
+                  </label>
+                  <input
+                    type="text"
+                    value={paypalInfo}
+                    onChange={(e) => setPaypalInfo(e.target.value)}
+                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    placeholder="email@example.com or PayPal.Me link"
+                    required
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-4 border-t border-gray-600">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onCancel}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            className="flex-1"
+          >
+            Save Changes
+          </Button>
+        </div>
+      </form>
+    );
   };
 
   const columns = useMemo<ColumnDef<Profile>[]>(
@@ -586,6 +769,25 @@ export const ProfilesPage: React.FC = () => {
         },
         size: 320,
       },
+      {
+        id: 'actions',
+        header: 'Actions',
+        cell: ({ row }) => (
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setEditingProfile(row.original);
+                setIsEditModalOpen(true);
+              }}
+            >
+              Edit
+            </Button>
+          </div>
+        ),
+        size: 100,
+      },
     ],
     [appUser, videoCountsByProfile, paymentStatsByProfile, uploadingId]
   );
@@ -779,6 +981,31 @@ export const ProfilesPage: React.FC = () => {
         size="md"
       >
         <ProfileForm onSuccess={() => setIsModalOpen(false)} />
+      </Modal>
+
+      {/* Edit Profile Modal */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingProfile(null);
+        }}
+        title="Edit Profile Details"
+        size="md"
+      >
+        {editingProfile && (
+          <EditProfileForm
+            profile={editingProfile}
+            onSuccess={() => {
+              setIsEditModalOpen(false);
+              setEditingProfile(null);
+            }}
+            onCancel={() => {
+              setIsEditModalOpen(false);
+              setEditingProfile(null);
+            }}
+          />
+        )}
       </Modal>
       </div>
     </>
