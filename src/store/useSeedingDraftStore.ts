@@ -9,6 +9,7 @@ import {
 
 interface SeedingDraftState {
   drafts: Draft[];
+  setDrafts: (drafts: Draft[]) => void;
   addDraft: (draft: Draft) => void;
   updateDraft: (id: string, updates: Partial<Draft>) => void;
   deleteDraft: (id: string) => void;
@@ -27,6 +28,8 @@ interface SeedingDraftState {
 
 export const useSeedingDraftStore = create<SeedingDraftState>((set, get) => ({
   drafts: [],
+
+  setDrafts: (drafts) => set({ drafts }),
 
   addDraft: (draft) =>
     set((state) => {

@@ -10,6 +10,7 @@ import {
 
 interface SeedingNegotiationState {
   negotiations: Negotiation[];
+  setNegotiations: (negotiations: Negotiation[]) => void;
   addNegotiation: (negotiation: Negotiation) => void;
   updateNegotiation: (id: string, updates: Partial<Negotiation>) => void;
   deleteNegotiation: (id: string) => void;
@@ -33,6 +34,8 @@ interface SeedingNegotiationState {
 
 export const useSeedingNegotiationStore = create<SeedingNegotiationState>((set, get) => ({
   negotiations: [],
+
+  setNegotiations: (negotiations) => set({ negotiations }),
 
   addNegotiation: (negotiation) =>
     set((state) => {

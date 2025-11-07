@@ -10,6 +10,7 @@ import {
 
 interface SeedingCreatorState {
   creators: Creator[];
+  setCreators: (creators: Creator[]) => void;
   addCreator: (creator: Creator) => void;
   addCreators: (creators: Creator[]) => void;
   updateCreator: (id: string, updates: Partial<Creator>) => void;
@@ -19,6 +20,8 @@ interface SeedingCreatorState {
 
 export const useSeedingCreatorStore = create<SeedingCreatorState>((set, get) => ({
   creators: [],
+
+  setCreators: (creators) => set({ creators }),
 
   addCreator: (creator) =>
     set((state) => {

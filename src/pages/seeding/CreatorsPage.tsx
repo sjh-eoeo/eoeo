@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useSeedingCreatorStore } from '../../store/useSeedingCreatorStore';
 import { useSeedingProjectStore } from '../../store/useSeedingProjectStore';
 import { useSeedingNegotiationStore } from '../../store/useSeedingNegotiationStore';
+import { useRealtimeCollection } from '../../hooks/useRealtimeCollection';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
@@ -30,7 +31,7 @@ import {
   fetchTikTokUserInfo,
   isValidTikTokLink,
 } from '../../lib/utils/tokapi';
-import type { Creator } from '../../types/seeding';
+import type { Creator, Project, Negotiation } from '../../types/seeding';
 
 // 컬럼 헬퍼를 컴포넌트 외부에 선언 (재생성 방지)
 const columnHelper = createColumnHelper<Creator>();
@@ -45,9 +46,14 @@ const columnHelper = createColumnHelper<Creator>();
  * - CSV 다운로드
  */
 export function SeedingCreatorsPage() {
-  const { creators, addCreator, addCreators, deleteCreator, updateCreator } = useSeedingCreatorStore();
-  const { projects } = useSeedingProjectStore();
-  const { negotiations } = useSeedingNegotiationStore();
+  const { creators, setCreators, addCreator, addCreators, deleteCreator, updateCreator } = useSeedingCreatorStore();
+  const { projects, setProjects } = useSeedingProjectStore();
+  const { negotiations, setNegotiations } = useSeedingNegotiationStore();
+  
+  // Firebase 실시간 동기화
+  useRealtimeCollection<Creator>('seeding-creators', setCreators);
+  useRealtimeCollection<Project>('seeding-projects', setProjects);
+  useRealtimeCollection<Negotiation>('seeding-negotiations', setNegotiations);
   
   // 모달 상태
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);

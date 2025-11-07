@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSeedingProjectStore } from '../../store/useSeedingProjectStore';
 import { useSeedingBrandStore } from '../../store/useSeedingBrandStore';
 import { useSeedingCreatorStore } from '../../store/useSeedingCreatorStore';
+import { useRealtimeCollection } from '../../hooks/useRealtimeCollection';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
@@ -20,7 +21,7 @@ import { useTableState } from '../../hooks/useTableState';
 import { creatorsToCSV, downloadCSV } from '../../lib/utils/seedingCsv';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase/config';
-import type { Project, Brand } from '../../types/seeding';
+import type { Project, Brand, Creator } from '../../types/seeding';
 import type { AppUser } from '../../types';
 
 const columnHelper = createColumnHelper<Project>();
@@ -32,9 +33,14 @@ const columnHelper = createColumnHelper<Project>();
  */
 export function SeedingProjectsPage() {
   const navigate = useNavigate();
-  const { projects, addProject, updateProject, deleteProject, addCreatorToProject, removeCreatorFromProject, addAssignee, removeAssignee, updateEmailTemplates } = useSeedingProjectStore();
-  const { brands } = useSeedingBrandStore();
-  const { creators } = useSeedingCreatorStore();
+  const { projects, setProjects, addProject, updateProject, deleteProject, addCreatorToProject, removeCreatorFromProject, addAssignee, removeAssignee, updateEmailTemplates } = useSeedingProjectStore();
+  const { brands, setBrands } = useSeedingBrandStore();
+  const { creators, setCreators } = useSeedingCreatorStore();
+  
+  // Firebase 실시간 동기화
+  useRealtimeCollection<Project>('seeding-projects', setProjects);
+  useRealtimeCollection<Brand>('seeding-brands', setBrands);
+  useRealtimeCollection<Creator>('seeding-creators', setCreators);
   
   // 탭 상태
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');

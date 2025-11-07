@@ -11,6 +11,7 @@ import {
 
 interface SeedingProjectState {
   projects: Project[];
+  setProjects: (projects: Project[]) => void;
   addProject: (project: Project) => void;
   updateProject: (id: string, updates: Partial<Project>) => void;
   deleteProject: (id: string) => void;
@@ -27,6 +28,8 @@ interface SeedingProjectState {
 
 export const useSeedingProjectStore = create<SeedingProjectState>((set, get) => ({
   projects: [],
+
+  setProjects: (projects) => set({ projects }),
 
   addProject: (project) =>
     set((state) => {

@@ -9,6 +9,7 @@ import {
 
 interface SeedingReachOutState {
   reachOuts: ReachOut[];
+  setReachOuts: (reachOuts: ReachOut[]) => void;
   addReachOut: (reachOut: ReachOut) => void;
   updateReachOut: (id: string, updates: Partial<ReachOut>) => void;
   deleteReachOut: (id: string) => void;
@@ -20,6 +21,8 @@ interface SeedingReachOutState {
 
 export const useSeedingReachOutStore = create<SeedingReachOutState>((set, get) => ({
   reachOuts: [],
+
+  setReachOuts: (reachOuts) => set({ reachOuts }),
 
   addReachOut: (reachOut) =>
     set((state) => {

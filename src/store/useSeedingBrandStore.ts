@@ -3,6 +3,7 @@ import type { Brand } from '../types/seeding';
 
 interface SeedingBrandState {
   brands: Brand[];
+  setBrands: (brands: Brand[]) => void;
   addBrand: (brand: Brand) => void;
   updateBrand: (id: string, updates: Partial<Brand>) => void;
   deleteBrand: (id: string) => void;
@@ -11,6 +12,8 @@ interface SeedingBrandState {
 
 export const useSeedingBrandStore = create<SeedingBrandState>((set, get) => ({
   brands: [],
+
+  setBrands: (brands) => set({ brands }),
 
   addBrand: (brand) =>
     set((state) => ({

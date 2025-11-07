@@ -9,6 +9,7 @@ import {
 
 interface SeedingPaymentState {
   payments: Payment[];
+  setPayments: (payments: Payment[]) => void;
   addPayment: (payment: Payment) => void;
   updatePayment: (id: string, updates: Partial<Payment>) => void;
   deletePayment: (id: string) => void;
@@ -28,6 +29,8 @@ interface SeedingPaymentState {
 
 export const useSeedingPaymentStore = create<SeedingPaymentState>((set, get) => ({
   payments: [],
+
+  setPayments: (payments) => set({ payments }),
 
   addPayment: (payment) =>
     set((state) => {
