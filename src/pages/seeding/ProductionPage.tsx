@@ -4,6 +4,8 @@ import { useSeedingNegotiationStore } from '../../store/useSeedingNegotiationSto
 import { useSeedingDraftStore } from '../../store/useSeedingDraftStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useLastViewedStore } from '../../store/useLastViewedStore';
+import { useFirestore } from '../../hooks/useFirestore';
+import { useRealtimeCollection } from '../../hooks/useRealtimeCollection';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { DataTable } from '../../components/ui/DataTable';
@@ -22,10 +24,16 @@ const columnHelper = createColumnHelper<Negotiation>();
 
 export function SeedingProductionPage() {
   const { appUser } = useAuthStore();
-  const { projects } = useSeedingProjectStore();
-  const { negotiations } = useSeedingNegotiationStore();
-  const { drafts, addDraft, addComment, approveDraft, requestRevision } = useSeedingDraftStore();
+  const { projects, setProjects } = useSeedingProjectStore();
+  const { negotiations, setNegotiations } = useSeedingNegotiationStore();
+  const { drafts, setDrafts, addDraft, addComment, approveDraft, requestRevision } = useSeedingDraftStore();
   const { markAsViewed, getLastViewed } = useLastViewedStore();
+  const { setDocument, updateDocument } = useFirestore();
+  
+  // Firebase 실시간 동기화
+  useRealtimeCollection('seeding-projects', setProjects);
+  useRealtimeCollection('seeding-negotiations', setNegotiations);
+  useRealtimeCollection('seeding-drafts', setDrafts);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedNegotiationId, setSelectedNegotiationId] = useState<string>('');
@@ -137,15 +145,16 @@ export function SeedingProductionPage() {
   });
 
   // 드래프트 업로드
-  const handleUploadDraft = () => {
+  const handleUploadDraft = async () => {
     if (!selectedNegotiationId || !selectedNegotiation || !appUser) return;
     if (!uploadForm.fileName || !uploadForm.fileUrl) {
       alert('파일명과 URL을 입력하세요.');
       return;
     }
 
+    const draftId = `draft-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const newDraft: Draft = {
-      id: `draft_${Date.now()}`,
+      id: draftId,
       negotiationId: selectedNegotiationId,
       projectId: selectedNegotiation.projectId,
       creatorId: selectedNegotiation.creatorId,
@@ -159,18 +168,24 @@ export function SeedingProductionPage() {
       updatedAt: new Date().toISOString(),
     };
 
-    addDraft(newDraft);
-    setIsUploadModalOpen(false);
-    setUploadForm({ fileName: '', fileUrl: '', fileSize: 0 });
-    alert('드래프트가 업로드되었습니다.');
+    try {
+      await setDocument('seeding-drafts', draftId, newDraft);
+      console.log('✅ Draft uploaded');
+      setIsUploadModalOpen(false);
+      setUploadForm({ fileName: '', fileUrl: '', fileSize: 0 });
+      alert('드래프트가 업로드되었습니다.');
+    } catch (error) {
+      console.error('❌ Error uploading draft:', error);
+      alert('업로드 실패');
+    }
   };
 
   // 댓글 추가
-  const handleAddComment = (draftId: string) => {
+  const handleAddComment = async (draftId: string) => {
     if (!commentInput.trim() || !appUser) return;
 
     const comment: ReviewComment = {
-      id: `comment_${Date.now()}`,
+      id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       draftId: draftId,
       userId: appUser.email,
       userName: appUser.email,
@@ -178,25 +193,56 @@ export function SeedingProductionPage() {
       timestamp: new Date().toISOString(),
     };
 
-    addComment(draftId, comment);
-    setCommentInput('');
+    try {
+      const draft = drafts.find(d => d.id === draftId);
+      const updatedComments = [...(draft?.comments || []), comment];
+      await updateDocument('seeding-drafts', draftId, {
+        comments: updatedComments,
+        updatedAt: new Date().toISOString(),
+      });
+      console.log('✅ Comment added');
+      setCommentInput('');
+    } catch (error) {
+      console.error('❌ Error adding comment:', error);
+      alert('댓글 추가 실패');
+    }
   };
 
   // 드래프트 승인
-  const handleApproveDraft = (draftId: string) => {
+  const handleApproveDraft = async (draftId: string) => {
     if (!appUser) return;
     if (!confirm('이 드래프트를 승인하시겠습니까?')) return;
 
-    approveDraft(draftId, appUser.email);
-    alert('드래프트가 승인되었습니다. 결제 페이지로 이동할 수 있습니다.');
+    try {
+      await updateDocument('seeding-drafts', draftId, {
+        status: 'approved',
+        approvedBy: appUser.email,
+        approvedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      console.log('✅ Draft approved');
+      alert('드래프트가 승인되었습니다. 결제 페이지로 이동할 수 있습니다.');
+    } catch (error) {
+      console.error('❌ Error approving draft:', error);
+      alert('승인 실패');
+    }
   };
 
   // 수정 요청
-  const handleRequestRevision = (draftId: string) => {
+  const handleRequestRevision = async (draftId: string) => {
     if (!confirm('수정을 요청하시겠습니까?')) return;
 
-    requestRevision(draftId);
-    alert('수정이 요청되었습니다.');
+    try {
+      await updateDocument('seeding-drafts', draftId, {
+        status: 'revision-requested',
+        updatedAt: new Date().toISOString(),
+      });
+      console.log('✅ Revision requested');
+      alert('수정이 요청되었습니다.');
+    } catch (error) {
+      console.error('❌ Error requesting revision:', error);
+      alert('수정 요청 실패');
+    }
   };
 
   return (

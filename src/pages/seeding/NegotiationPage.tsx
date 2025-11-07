@@ -3,6 +3,8 @@ import { useSeedingProjectStore } from '../../store/useSeedingProjectStore';
 import { useSeedingCreatorStore } from '../../store/useSeedingCreatorStore';
 import { useSeedingReachOutStore } from '../../store/useSeedingReachOutStore';
 import { useSeedingNegotiationStore } from '../../store/useSeedingNegotiationStore';
+import { useRealtimeCollection } from '../../hooks/useRealtimeCollection';
+import { useFirestore } from '../../hooks/useFirestore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useLastViewedStore } from '../../store/useLastViewedStore';
 import { Input } from '../../components/ui/Input';
@@ -36,16 +38,24 @@ const AVAILABLE_PLATFORMS = [
 
 export function SeedingNegotiationPage() {
   const { appUser } = useAuthStore();
-  const { projects } = useSeedingProjectStore();
-  const { creators } = useSeedingCreatorStore();
-  const { reachOuts } = useSeedingReachOutStore();
-  const { negotiations, addNegotiation, updateTerms, addMessage, setTrackingNumber, completeNegotiation } = useSeedingNegotiationStore();
+  const { projects, setProjects } = useSeedingProjectStore();
+  const { creators, setCreators } = useSeedingCreatorStore();
+  const { reachOuts, setReachOuts } = useSeedingReachOutStore();
+  const { negotiations, setNegotiations, addNegotiation, updateTerms, addMessage, setTrackingNumber, completeNegotiation } = useSeedingNegotiationStore();
+  const { setDocument, updateDocument } = useFirestore();
   const { lastViewed, markAsViewed, getLastViewed } = useLastViewedStore();
+  
+  // Firebase 실시간 동기화
+  useRealtimeCollection('seeding-projects', setProjects);
+  useRealtimeCollection('seeding-creators', setCreators);
+  useRealtimeCollection('seeding-reach-outs', setReachOuts);
+  useRealtimeCollection('seeding-negotiations', setNegotiations);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedNegotiationId, setSelectedNegotiationId] = useState<string>('');
   const [isEditingTerms, setIsEditingTerms] = useState(false);
   const [chatInput, setChatInput] = useState('');
+  const [trackingNumberInput, setTrackingNumberInput] = useState('');
   const [isCreatorDetailModalOpen, setIsCreatorDetailModalOpen] = useState(false);
 
   // 선택된 프로젝트의 interested 크리에이터들 (협상 업데이트 시간 기준 정렬)
@@ -77,7 +87,7 @@ export function SeedingNegotiationPage() {
   }, [selectedNegotiation, creators]);
 
   // 크리에이터 선택 시 협상 생성 또는 선택
-  const handleSelectCreator = (reachOut: ReachOut) => {
+  const handleSelectCreator = async (reachOut: ReachOut) => {
     // 이미 협상이 존재하는지 확인
     let negotiation = negotiations.find(
       n => n.projectId === selectedProjectId && n.creatorId === reachOut.creatorId
@@ -85,8 +95,9 @@ export function SeedingNegotiationPage() {
 
     // 없으면 새로 생성
     if (!negotiation) {
+      const negId = `neg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const newNegotiation: Negotiation = {
-        id: `neg_${Date.now()}_${reachOut.creatorId}`,
+        id: negId,
         projectId: selectedProjectId,
         creatorId: reachOut.creatorId,
         creatorUserId: reachOut.creatorUserId,
@@ -96,8 +107,16 @@ export function SeedingNegotiationPage() {
         startedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      addNegotiation(newNegotiation);
-      setSelectedNegotiationId(newNegotiation.id);
+      
+      try {
+        await setDocument('seeding-negotiations', negId, newNegotiation);
+        console.log('✅ Negotiation created');
+        setSelectedNegotiationId(negId);
+      } catch (error) {
+        console.error('❌ Error creating negotiation:', error);
+        alert('협상 생성 실패');
+        return;
+      }
     } else {
       setSelectedNegotiationId(negotiation.id);
     }
@@ -184,6 +203,15 @@ export function SeedingNegotiationPage() {
         accountNumber: '',
         paypalInfo: '',
       });
+    }
+  }, [selectedNegotiation]);
+
+  // 운송장 번호 로드
+  useEffect(() => {
+    if (selectedNegotiation?.trackingNumber) {
+      setTrackingNumberInput(selectedNegotiation.trackingNumber);
+    } else {
+      setTrackingNumberInput('');
     }
   }, [selectedNegotiation]);
 
@@ -282,7 +310,7 @@ export function SeedingNegotiationPage() {
   };
 
   // 협상 조건 저장
-  const handleSaveTerms = () => {
+  const handleSaveTerms = async () => {
     if (!selectedNegotiationId) return;
 
     // 필수 필드 검증
@@ -316,49 +344,87 @@ export function SeedingNegotiationPage() {
     // Generate contract period string
     const contractPeriod = `${termsForm.contractStartDate} ~ ${termsForm.contractEndDate}`;
 
-    updateTerms(selectedNegotiationId, {
-      videoCount: parseInt(termsForm.videoCount) || 0,
-      amount: parseInt(termsForm.amount) || 0,
-      currency: 'USD',
-      uploadPlatforms: termsForm.platforms,
-      videoScript: termsForm.scriptLink,
-      sparkleCode: termsForm.sparkleCode ? 'YES' : undefined,
-      contractPeriod: contractPeriod,
-      productionPeriod: undefined, // 제거됨
-      contentReuseAllowed: termsForm.contentReuseAllowed,
-      paymentMethod: paymentInfoText,
-    });
-
-    setIsEditingTerms(false);
-    alert('협상 조건이 저장되었습니다.');
+    try {
+      const termsData: any = {
+        videoCount: parseInt(termsForm.videoCount) || 0,
+        amount: parseInt(termsForm.amount) || 0,
+        currency: 'USD',
+        uploadPlatforms: termsForm.platforms,
+        videoScript: termsForm.scriptLink,
+        contractPeriod: contractPeriod,
+        contentReuseAllowed: termsForm.contentReuseAllowed,
+        paymentMethod: paymentInfoText,
+      };
+      
+      // sparkleCode는 YES일 때만 추가
+      if (termsForm.sparkleCode) {
+        termsData.sparkleCode = 'YES';
+      }
+      
+      await updateDocument('seeding-negotiations', selectedNegotiationId, {
+        terms: termsData,
+        updatedAt: new Date().toISOString(),
+      });
+      console.log('✅ Terms updated');
+      setIsEditingTerms(false);
+      alert('협상 조건이 저장되었습니다.');
+    } catch (error) {
+      console.error('❌ Error updating terms:', error);
+      alert('저장 실패');
+    }
   };
 
   // 메시지 전송
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!selectedNegotiationId || !chatInput.trim() || !appUser) return;
 
     const message: ChatMessage = {
-      id: `msg_${Date.now()}`,
+      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       negotiationId: selectedNegotiationId,
       senderId: appUser.email,
-      senderName: appUser.email, // 로그인한 사용자 이메일 표시
+      senderName: appUser.email,
       message: chatInput,
       timestamp: new Date().toISOString(),
     };
 
-    addMessage(selectedNegotiationId, message);
-    setChatInput('');
+    try {
+      const currentNeg = negotiations.find(n => n.id === selectedNegotiationId);
+      const updatedMessages = [...(currentNeg?.messages || []), message];
+      await updateDocument('seeding-negotiations', selectedNegotiationId, {
+        messages: updatedMessages,
+        updatedAt: new Date().toISOString(),
+      });
+      console.log('✅ Message sent');
+      setChatInput('');
+    } catch (error) {
+      console.error('❌ Error sending message:', error);
+      alert('메시지 전송 실패');
+    }
   };
 
   // 운송장 번호 저장
-  const handleSaveTrackingNumber = (trackingNumber: string) => {
+  const handleSaveTrackingNumber = async () => {
     if (!selectedNegotiationId) return;
-    setTrackingNumber(selectedNegotiationId, trackingNumber);
-    alert('운송장 번호가 저장되었습니다.');
+    if (!trackingNumberInput.trim()) {
+      alert('운송장 번호를 입력하세요.');
+      return;
+    }
+    
+    try {
+      await updateDocument('seeding-negotiations', selectedNegotiationId, {
+        trackingNumber: trackingNumberInput.trim(),
+        updatedAt: new Date().toISOString(),
+      });
+      console.log('✅ Tracking number saved');
+      alert('운송장 번호가 저장되었습니다.');
+    } catch (error) {
+      console.error('❌ Error saving tracking number:', error);
+      alert('저장 실패');
+    }
   };
 
   // 협상 완료
-  const handleCompleteNegotiation = () => {
+  const handleCompleteNegotiation = async () => {
     if (!selectedNegotiationId) return;
     
     // 필수 필드 검증
@@ -369,9 +435,19 @@ export function SeedingNegotiationPage() {
     
     if (!confirm('협상을 완료하시겠습니까? 제작 단계로 넘어갑니다.')) return;
 
-    completeNegotiation(selectedNegotiationId);
-    alert('협상이 완료되었습니다. 제작 페이지로 이동합니다.');
-    // TODO: Navigate to /seeding/production
+    try {
+      await updateDocument('seeding-negotiations', selectedNegotiationId, {
+        status: 'completed',
+        completedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      console.log('✅ Negotiation completed');
+      alert('협상이 완료되었습니다. 제작 페이지로 이동합니다.');
+      // TODO: Navigate to /seeding/production
+    } catch (error) {
+      console.error('❌ Error completing negotiation:', error);
+      alert('완료 처리 실패');
+    }
   };
 
   return (
@@ -638,11 +714,21 @@ export function SeedingNegotiationPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1">운송장 번호 (선택)</label>
-                    <Input
-                      value={selectedNegotiation.trackingNumber || ''}
-                      onChange={(e) => handleSaveTrackingNumber(e.target.value)}
-                      placeholder="운송장 번호를 입력하세요"
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        value={trackingNumberInput}
+                        onChange={(e) => setTrackingNumberInput(e.target.value)}
+                        placeholder="운송장 번호를 입력하세요 (문자/숫자 모두 가능)"
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        onClick={handleSaveTrackingNumber}
+                        disabled={!trackingNumberInput.trim()}
+                      >
+                        저장
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-4">

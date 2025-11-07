@@ -4,6 +4,7 @@ import { useSeedingProjectStore } from '../../store/useSeedingProjectStore';
 import { useSeedingBrandStore } from '../../store/useSeedingBrandStore';
 import { useSeedingCreatorStore } from '../../store/useSeedingCreatorStore';
 import { useRealtimeCollection } from '../../hooks/useRealtimeCollection';
+import { useFirestore } from '../../hooks/useFirestore';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
@@ -36,6 +37,7 @@ export function SeedingProjectsPage() {
   const { projects, setProjects, addProject, updateProject, deleteProject, addCreatorToProject, removeCreatorFromProject, addAssignee, removeAssignee, updateEmailTemplates } = useSeedingProjectStore();
   const { brands, setBrands } = useSeedingBrandStore();
   const { creators, setCreators } = useSeedingCreatorStore();
+  const { setDocument, updateDocument, deleteDocument } = useFirestore();
   
   // Firebase 실시간 동기화
   useRealtimeCollection<Project>('seeding-projects', setProjects);
@@ -307,7 +309,7 @@ export function SeedingProjectsPage() {
   });
 
   // 프로젝트 추가
-  const handleAddProject = (e: React.FormEvent) => {
+  const handleAddProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProject.name || !newProject.brandId) {
       alert('프로젝트명과 브랜드를 선택하세요.');
@@ -320,50 +322,59 @@ export function SeedingProjectsPage() {
       return;
     }
 
-    const project: Project = {
-      id: `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    const projectId = `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const project: any = {
+      id: projectId,
       name: newProject.name,
       brandId: newProject.brandId,
       brandName: brand.name,
       status: 'setup',
       selectedCreators: [],
-      assignees: [], // 초기 담당자 없음
+      assignees: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      description: newProject.description || undefined,
-      notes: newProject.notes || undefined,
     };
+    
+    // Firebase는 undefined 허용 안함 - 값이 있을 때만 추가
+    if (newProject.description) project.description = newProject.description;
+    if (newProject.notes) project.notes = newProject.notes;
 
-    addProject(project);
-    setIsAddProjectModalOpen(false);
-    setNewProject({ name: '', brandId: '', description: '', notes: '' });
+    try {
+      // Firebase에 저장
+      await setDocument('seeding-projects', projectId, project);
+      // 로컬 스토어는 실시간 동기화로 자동 업데이트됨
+      setIsAddProjectModalOpen(false);
+      setNewProject({ name: '', brandId: '', description: '', notes: '' });
+    } catch (error) {
+      console.error('Error adding project:', error);
+      alert('프로젝트 추가 실패');
+    }
   };
 
   // 크리에이터 선택 저장
-  const handleSaveCreators = () => {
+  const handleSaveCreators = async () => {
     if (!selectedProject) return;
 
     const currentCreators = selectedProject.selectedCreators;
     const newCreators = selectedCreatorIds;
 
-    // 추가할 크리에이터
-    const toAdd = newCreators.filter((id) => !currentCreators.includes(id));
-    // 제거할 크리에이터
-    const toRemove = currentCreators.filter((id) => !newCreators.includes(id));
-
-    toAdd.forEach((creatorId) => {
-      addCreatorToProject(selectedProject.id, creatorId);
-    });
-
-    toRemove.forEach((creatorId) => {
-      removeCreatorFromProject(selectedProject.id, creatorId);
-    });
-
-    setIsSelectCreatorsModalOpen(false);
-    setSelectedProject(null);
-    setSelectedCreatorIds([]);
-    setCreatorSearchQuery('');
-    setCreatorCategoryFilter('all');
+    try {
+      // Firebase에 업데이트
+      await updateDocument('seeding-projects', selectedProject.id, {
+        selectedCreators: newCreators,
+        updatedAt: new Date().toISOString(),
+      });
+      
+      // 로컬 스토어는 실시간 동기화로 자동 업데이트됨
+      setIsSelectCreatorsModalOpen(false);
+      setSelectedProject(null);
+      setSelectedCreatorIds([]);
+      setCreatorSearchQuery('');
+      setCreatorCategoryFilter('all');
+    } catch (error) {
+      console.error('Error updating creators:', error);
+      alert('크리에이터 업데이트 실패');
+    }
   };
 
   // 크리에이터 선택 토글
@@ -390,7 +401,7 @@ export function SeedingProjectsPage() {
   };
 
   // 담당자 추가
-  const handleAddAssignee = () => {
+  const handleAddAssignee = async () => {
     if (!selectedProject || !assigneeInput.trim()) return;
     
     // 이메일 형식 간단 검증
@@ -404,13 +415,41 @@ export function SeedingProjectsPage() {
       return;
     }
     
-    setSelectedAssignees([...selectedAssignees, assigneeInput.trim()]);
-    setAssigneeInput('');
+    const newAssignees = [...selectedAssignees, assigneeInput.trim()];
+    
+    try {
+      // Firebase에 업데이트
+      await updateDocument('seeding-projects', selectedProject.id, {
+        assignees: newAssignees,
+        updatedAt: new Date().toISOString(),
+      });
+      
+      setSelectedAssignees(newAssignees);
+      setAssigneeInput('');
+    } catch (error) {
+      console.error('Error adding assignee:', error);
+      alert('담당자 추가 실패');
+    }
   };
 
   // 담당자 제거
-  const handleRemoveAssignee = (email: string) => {
-    setSelectedAssignees(selectedAssignees.filter(e => e !== email));
+  const handleRemoveAssignee = async (email: string) => {
+    if (!selectedProject) return;
+    
+    const newAssignees = selectedAssignees.filter(e => e !== email);
+    
+    try {
+      // Firebase에 업데이트
+      await updateDocument('seeding-projects', selectedProject.id, {
+        assignees: newAssignees,
+        updatedAt: new Date().toISOString(),
+      });
+      
+      setSelectedAssignees(newAssignees);
+    } catch (error) {
+      console.error('Error removing assignee:', error);
+      alert('담당자 제거 실패');
+    }
   };
 
   // 이메일 템플릿 모달 열기
@@ -439,7 +478,7 @@ export function SeedingProjectsPage() {
   };
 
   // 이메일 템플릿 저장
-  const handleSaveEmailTemplates = () => {
+  const handleSaveEmailTemplates = async () => {
     if (!selectedProject) return;
 
     const templates = emailTemplates.map((t) => ({
@@ -448,36 +487,40 @@ export function SeedingProjectsPage() {
       updatedAt: new Date().toISOString(),
     }));
 
-    updateEmailTemplates(selectedProject.id, templates);
-    setIsEmailTemplatesModalOpen(false);
-    setSelectedProject(null);
-    setEmailTemplates([]);
+    try {
+      // Firebase에 업데이트
+      await updateDocument('seeding-projects', selectedProject.id, {
+        emailTemplates: templates,
+        updatedAt: new Date().toISOString(),
+      });
+      
+      setIsEmailTemplatesModalOpen(false);
+      setSelectedProject(null);
+    } catch (error) {
+      console.error('Error saving email templates:', error);
+      alert('이메일 템플릿 저장 실패');
+    }
   };
 
   // 담당자 저장
-  const handleSaveAssignees = () => {
+  const handleSaveAssignees = async () => {
     if (!selectedProject) return;
 
-    const currentAssignees = selectedProject.assignees || [];
-    const newAssignees = selectedAssignees;
-
-    // 추가할 담당자
-    const toAdd = newAssignees.filter((email) => !currentAssignees.includes(email));
-    // 제거할 담당자
-    const toRemove = currentAssignees.filter((email) => !newAssignees.includes(email));
-
-    toAdd.forEach((email) => {
-      addAssignee(selectedProject.id, email);
-    });
-
-    toRemove.forEach((email) => {
-      removeAssignee(selectedProject.id, email);
-    });
-
-    setIsManageAssigneesModalOpen(false);
-    setSelectedProject(null);
-    setSelectedAssignees([]);
-    setAssigneeInput('');
+    try {
+      // Firebase에 업데이트
+      await updateDocument('seeding-projects', selectedProject.id, {
+        assignees: selectedAssignees,
+        updatedAt: new Date().toISOString(),
+      });
+      
+      setIsManageAssigneesModalOpen(false);
+      setSelectedProject(null);
+      setSelectedAssignees([]);
+      setAssigneeInput('');
+    } catch (error) {
+      console.error('Error saving assignees:', error);
+      alert('담당자 저장 실패');
+    }
   };
 
   return (

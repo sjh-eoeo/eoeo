@@ -5,6 +5,8 @@ import { useSeedingDraftStore } from '../../store/useSeedingDraftStore';
 import { useSeedingPaymentStore } from '../../store/useSeedingPaymentStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useLastViewedStore } from '../../store/useLastViewedStore';
+import { useFirestore } from '../../hooks/useFirestore';
+import { useRealtimeCollection } from '../../hooks/useRealtimeCollection';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { DataTable } from '../../components/ui/DataTable';
@@ -23,11 +25,18 @@ const columnHelper = createColumnHelper<Negotiation>();
 
 export function SeedingPaymentPage() {
   const { appUser } = useAuthStore();
-  const { projects } = useSeedingProjectStore();
-  const { negotiations } = useSeedingNegotiationStore();
-  const { drafts } = useSeedingDraftStore();
-  const { payments, addPayment, processPayment, completePayment } = useSeedingPaymentStore();
+  const { projects, setProjects } = useSeedingProjectStore();
+  const { negotiations, setNegotiations } = useSeedingNegotiationStore();
+  const { drafts, setDrafts } = useSeedingDraftStore();
+  const { payments, setPayments, addPayment, processPayment, completePayment } = useSeedingPaymentStore();
   const { markAsViewed, getLastViewed } = useLastViewedStore();
+  const { setDocument, updateDocument } = useFirestore();
+  
+  // Firebase 실시간 동기화
+  useRealtimeCollection('seeding-projects', setProjects);
+  useRealtimeCollection('seeding-negotiations', setNegotiations);
+  useRealtimeCollection('seeding-drafts', setDrafts);
+  useRealtimeCollection('seeding-payments', setPayments);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedNegotiationId, setSelectedNegotiationId] = useState<string>('');
@@ -157,7 +166,7 @@ export function SeedingPaymentPage() {
   });
 
   // 결제 등록
-  const handleRegisterPayment = () => {
+  const handleRegisterPayment = async () => {
     if (!selectedNegotiation || !selectedNegotiation.terms) {
       alert('협상 조건을 찾을 수 없습니다.');
       return;
@@ -169,8 +178,9 @@ export function SeedingPaymentPage() {
       return;
     }
 
+    const paymentId = `payment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const newPayment: Payment = {
-      id: `payment_${Date.now()}`,
+      id: paymentId,
       negotiationId: selectedNegotiation.id,
       projectId: selectedNegotiation.projectId,
       creatorId: selectedNegotiation.creatorId,
@@ -184,36 +194,57 @@ export function SeedingPaymentPage() {
       createdAt: new Date().toISOString(),
     };
 
-    addPayment(newPayment);
-    alert('결제가 등록되었습니다.');
+    try {
+      await setDocument('seeding-payments', paymentId, newPayment);
+      console.log('✅ Payment registered');
+      alert('결제가 등록되었습니다.');
+    } catch (error) {
+      console.error('❌ Error registering payment:', error);
+      alert('결제 등록 실패');
+    }
   };
 
   // 결제 처리
-  const handleProcessPayment = () => {
+  const handleProcessPayment = async () => {
     if (!negotiationPayment || !appUser) return;
     if (!paymentForm.paidAmount || !paymentForm.receiptUrl) {
       alert('결제 금액과 송금증 URL을 입력하세요.');
       return;
     }
 
-    processPayment(
-      negotiationPayment.id,
-      parseInt(paymentForm.paidAmount),
-      paymentForm.receiptUrl
-    );
-
-    setIsPaymentModalOpen(false);
-    setPaymentForm({ paidAmount: '', receiptUrl: '' });
-    alert('결제가 처리되었습니다. 재무팀 승인 대기 중입니다.');
+    try {
+      await updateDocument('seeding-payments', negotiationPayment.id, {
+        paidAmount: parseInt(paymentForm.paidAmount),
+        receiptUrl: paymentForm.receiptUrl,
+        status: 'processing',
+        processedAt: new Date().toISOString(),
+      });
+      console.log('✅ Payment processed');
+      setIsPaymentModalOpen(false);
+      setPaymentForm({ paidAmount: '', receiptUrl: '' });
+      alert('결제가 처리되었습니다. 재무팀 승인 대기 중입니다.');
+    } catch (error) {
+      console.error('❌ Error processing payment:', error);
+      alert('결제 처리 실패');
+    }
   };
 
   // 결제 완료 (재무팀 승인 후)
-  const handleCompletePayment = () => {
+  const handleCompletePayment = async () => {
     if (!negotiationPayment) return;
     if (!confirm('결제를 완료 처리하시겠습니까?')) return;
 
-    completePayment(negotiationPayment.id);
-    alert('결제가 완료되었습니다.');
+    try {
+      await updateDocument('seeding-payments', negotiationPayment.id, {
+        status: 'completed',
+        completedAt: new Date().toISOString(),
+      });
+      console.log('✅ Payment completed');
+      alert('결제가 완료되었습니다.');
+    } catch (error) {
+      console.error('❌ Error completing payment:', error);
+      alert('완료 처리 실패');
+    }
   };
 
   // CSV 다운로드

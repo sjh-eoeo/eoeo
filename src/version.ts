@@ -9,9 +9,36 @@
  * - PATCH: 버그 수정
  */
 
-export const VERSION = '2.0.1';
+export const VERSION = '2.0.5';
 export const BUILD_DATE = '2025-01-07';
 export const RELEASE_NOTES = {
+  '2.0.5': [
+    '🔧 운송장 번호 입력 UX 개선',
+    '✅ 저장 버튼 추가 - 입력 완료 후 한 번만 저장',
+    '🔤 문자/숫자 모두 입력 가능',
+    '⚡ 불필요한 자동 저장 제거',
+  ],
+  '2.0.4': [
+    '🔥 Seeding 시스템 전체 페이지 Firebase 동기화 완료',
+    '✅ ReachOut, Negotiation, Production, Payment 페이지 Firebase 저장',
+    '🚫 ReachOut 중복 생성 방지 로직 추가',
+    '💾 모든 CRUD 작업이 Firebase에 직접 저장됨',
+    '🔄 7개 컬렉션 실시간 동기화 (brands, creators, projects, reach-outs, negotiations, drafts, payments)',
+    '⚡ 모든 계정이 실시간으로 데이터 공유',
+    '🐛 undefined 필드 에러 완전 제거',
+  ],
+  '2.0.3': [
+    '🔥 Seeding 시스템 Firebase 실시간 동기화 완전 수정',
+    '💾 모든 데이터가 Firebase에 자동 저장됨',
+    '🔄 실시간 다중 사용자 동기화 완벽 작동',
+    '✅ 데이터 영속성 보장 (새로고침해도 유지)',
+    '🐛 Tailwind CDN 프로덕션 경고 수정',
+  ],
+  '2.0.2': [
+    '🚨 긴급 수정: 권한 오류로 다른 유저가 데이터 못 보는 문제 해결',
+    '🔒 Firestore 보안 규칙에서 status 체크 제거',
+    '✅ 모든 인증된 사용자가 전체 데이터 접근 가능',
+  ],
   '2.0.1': [
     '🎨 TikTok Dashboard → eoeo workspace 리브랜딩',
     '🔄 자동 백업 시스템 추가 (1시간 간격, 7일 보관)',

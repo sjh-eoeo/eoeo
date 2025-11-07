@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { useSeedingReachOutStore } from '../../store/useSeedingReachOutStore';
 import { useSeedingProjectStore } from '../../store/useSeedingProjectStore';
 import { useSeedingCreatorStore } from '../../store/useSeedingCreatorStore';
+import { useRealtimeCollection } from '../../hooks/useRealtimeCollection';
+import { useFirestore } from '../../hooks/useFirestore';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Badge } from '../../components/ui/Badge';
@@ -16,9 +18,16 @@ const columnHelper = createColumnHelper<ReachOut>();
 
 export function SeedingReachOutPage() {
   const [searchParams] = useSearchParams();
-  const { reachOuts, addReachOut, setResponseStatus } = useSeedingReachOutStore();
-  const { projects } = useSeedingProjectStore();
-  const { creators } = useSeedingCreatorStore();
+  const { reachOuts, setReachOuts, addReachOut, setResponseStatus } = useSeedingReachOutStore();
+  const { projects, setProjects } = useSeedingProjectStore();
+  const { creators, setCreators } = useSeedingCreatorStore();
+  const { setDocument, updateDocument } = useFirestore();
+  
+  // Firebase 실시간 동기화
+  useRealtimeCollection('seeding-reach-outs', setReachOuts);
+  useRealtimeCollection('seeding-projects', setProjects);
+  useRealtimeCollection('seeding-creators', setCreators);
+  
   const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -30,32 +39,44 @@ export function SeedingReachOutPage() {
       
       // 해당 프로젝트의 크리에이터들에게 자동으로 reach-out 생성
       const project = projects.find(p => p.id === projectIdFromQuery);
-      if (project) {
+      if (project && project.selectedCreators.length > 0) {
+        // 현재 reachOuts 상태를 한 번만 읽어옴
+        const currentReachOuts = reachOuts;
+        
         project.selectedCreators.forEach(creatorId => {
           const creator = creators.find(c => c.id === creatorId);
           if (creator) {
-            // 이미 존재하는 reach-out인지 확인
-            const existingReachOut = reachOuts.find(
+            // 이미 존재하는 reach-out인지 확인 (어떤 상태든 존재하면 제외)
+            const existingReachOut = currentReachOuts.find(
               ro => ro.projectId === projectIdFromQuery && ro.creatorId === creatorId
             );
             
             if (!existingReachOut) {
-              addReachOut({
-                id: `ro_${Date.now()}_${creatorId}`,
+              const reachOutId = `ro-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+              const reachOutData = {
+                id: reachOutId,
                 projectId: projectIdFromQuery,
                 creatorId: creatorId,
                 creatorUserId: creator.userId,
                 creatorEmail: creator.email,
-                status: 'pending',
+                status: 'pending' as const,
                 reachOutDate: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
+              };
+              
+              console.log('✅ Creating new reach-out for:', creator.userId);
+              // Firebase에 저장 (실시간 동기화가 자동으로 로컬 업데이트)
+              setDocument('seeding-reach-outs', reachOutId, reachOutData).catch(err => {
+                console.error('❌ Error creating reach-out:', err);
               });
+            } else {
+              console.log('⏭️ Skipping existing reach-out for:', creator.userId, '(status:', existingReachOut.status, ')');
             }
           }
         });
       }
     }
-  }, [searchParams, projects, creators, reachOuts, addReachOut]);
+  }, [searchParams, projects, creators]); // reachOuts 제거!
 
   const filteredReachOuts = useMemo(() => {
     let filtered = reachOuts;
@@ -113,14 +134,52 @@ export function SeedingReachOutPage() {
     columnHelper.display({
       id: 'actions',
       header: 'Actions',
-      cell: (info) => (
-        <div className="flex gap-2">
-          <Button size="sm" onClick={() => setResponseStatus(info.row.original.id, 'interested')}>관심있음</Button>
-          <Button size="sm" variant="danger" onClick={() => setResponseStatus(info.row.original.id, 'declined')}>거절</Button>
-        </div>
-      ),
+      cell: (info) => {
+        const reachOut = info.row.original;
+        return (
+          <div className="flex gap-2">
+            <Button 
+              size="sm" 
+              onClick={async () => {
+                try {
+                  await updateDocument('seeding-reach-outs', reachOut.id, {
+                    status: 'interested',
+                    responseDate: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                  });
+                  console.log('✅ Status updated: interested');
+                } catch (error) {
+                  console.error('❌ Error updating status:', error);
+                }
+              }}
+              disabled={reachOut.status === 'interested'}
+            >
+              관심있음
+            </Button>
+            <Button 
+              size="sm" 
+              variant="danger" 
+              onClick={async () => {
+                try {
+                  await updateDocument('seeding-reach-outs', reachOut.id, {
+                    status: 'declined',
+                    responseDate: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                  });
+                  console.log('✅ Status updated: declined');
+                } catch (error) {
+                  console.error('❌ Error updating status:', error);
+                }
+              }}
+              disabled={reachOut.status === 'declined'}
+            >
+              거절
+            </Button>
+          </div>
+        );
+      },
     }),
-  ], [setResponseStatus, projects]);
+  ], [projects, updateDocument]);
 
   const tableState = useTableState({
     initialSorting: [{ id: 'updatedAt', desc: true }],

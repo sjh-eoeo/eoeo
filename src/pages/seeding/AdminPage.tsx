@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useSeedingBrandStore } from '../../store/useSeedingBrandStore';
+import { useFirestore } from '../../hooks/useFirestore';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
@@ -23,6 +24,7 @@ const columnHelper = createColumnHelper<Brand>();
  */
 export function SeedingAdminPage() {
   const { brands, addBrand, deleteBrand } = useSeedingBrandStore();
+  const { setDocument, deleteDocument } = useFirestore();
   
   // 모달 상태
   const [isAddBrandModalOpen, setIsAddBrandModalOpen] = useState(false);
@@ -59,9 +61,18 @@ export function SeedingAdminPage() {
         <Button
           size="sm"
           variant="danger"
-          onClick={() => {
+          onClick={async () => {
             if (confirm(`브랜드 "${info.row.original.name}"을(를) 삭제하시겠습니까?`)) {
-              deleteBrand(info.row.original.id);
+              try {
+                // Firebase에서 삭제
+                await deleteDocument('seeding-brands', info.row.original.id);
+                // 로컬 스토어에서도 삭제
+                deleteBrand(info.row.original.id);
+                console.log('✅ Brand deleted');
+              } catch (error) {
+                console.error('❌ Error deleting brand:', error);
+                alert('브랜드 삭제 실패');
+              }
             }
           }}
         >
@@ -69,7 +80,7 @@ export function SeedingAdminPage() {
         </Button>
       ),
     }),
-  ], [deleteBrand]);
+  ], [deleteDocument, deleteBrand]);
 
   const tableState = useTableState({
     initialSorting: [{ id: 'createdAt', desc: true }],
@@ -90,23 +101,39 @@ export function SeedingAdminPage() {
   });
 
   // 브랜드 추가
-  const handleAddBrand = (e: React.FormEvent) => {
+  const handleAddBrand = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBrand.name) {
       alert('브랜드명을 입력하세요.');
       return;
     }
 
-    const brand: Brand = {
-      id: `brand-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    const brandId = `brand-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const brandData: any = {
+      id: brandId,
       name: newBrand.name,
-      description: newBrand.description || undefined,
       createdAt: new Date().toISOString(),
     };
+    
+    // Firebase는 undefined 허용 안함
+    if (newBrand.description) brandData.description = newBrand.description;
 
-    addBrand(brand);
-    setIsAddBrandModalOpen(false);
-    setNewBrand({ name: '', description: '' });
+    try {
+      console.log('🔥 Saving brand to Firebase:', brandData);
+      // Firebase에 저장
+      await setDocument('seeding-brands', brandId, brandData);
+      console.log('✅ Brand saved successfully to Firebase');
+      
+      // 로컬 스토어에도 추가 (화면에 즉시 반영)
+      addBrand(brandData);
+      console.log('✅ Brand added to local store');
+      
+      setIsAddBrandModalOpen(false);
+      setNewBrand({ name: '', description: '' });
+    } catch (error) {
+      console.error('❌ Error adding brand:', error);
+      alert('브랜드 추가 실패: ' + (error as Error).message);
+    }
   };
 
   return (

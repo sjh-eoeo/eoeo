@@ -3,6 +3,7 @@ import { useSeedingCreatorStore } from '../../store/useSeedingCreatorStore';
 import { useSeedingProjectStore } from '../../store/useSeedingProjectStore';
 import { useSeedingNegotiationStore } from '../../store/useSeedingNegotiationStore';
 import { useRealtimeCollection } from '../../hooks/useRealtimeCollection';
+import { useFirestore } from '../../hooks/useFirestore';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
@@ -49,6 +50,7 @@ export function SeedingCreatorsPage() {
   const { creators, setCreators, addCreator, addCreators, deleteCreator, updateCreator } = useSeedingCreatorStore();
   const { projects, setProjects } = useSeedingProjectStore();
   const { negotiations, setNegotiations } = useSeedingNegotiationStore();
+  const { setDocument, updateDocument, deleteDocument } = useFirestore();
   
   // Firebase 실시간 동기화
   useRealtimeCollection<Creator>('seeding-creators', setCreators);
@@ -155,12 +157,20 @@ export function SeedingCreatorsPage() {
           </Button>
           <Button
             size="sm"
+            variant="primary"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEditCreator(info.row.original);
+            }}
+          >
+            수정
+          </Button>
+          <Button
+            size="sm"
             variant="danger"
             onClick={(e) => {
               e.stopPropagation();
-              if (confirm(`${info.row.original.userId}를 삭제하시겠습니까?`)) {
-                deleteCreator(info.row.original.id);
-              }
+              handleDeleteCreator(info.row.original);
             }}
           >
             삭제
@@ -168,7 +178,7 @@ export function SeedingCreatorsPage() {
         </div>
       ),
     }),
-  ], [deleteCreator]);
+  ], []);
 
   // 테이블 설정
   const tableState = useTableState({
@@ -237,7 +247,7 @@ export function SeedingCreatorsPage() {
   };
 
   // 수동 추가 핸들러
-  const handleAddCreator = (e: React.FormEvent) => {
+  const handleAddCreator = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!newCreator.userId || !newCreator.email) {
@@ -245,8 +255,9 @@ export function SeedingCreatorsPage() {
       return;
     }
 
-    const creator: Creator = {
-      id: `creator-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    const creatorId = `creator-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const creatorData: any = {
+      id: creatorId,
       userId: newCreator.userId,
       profileLink: newCreator.profileLink || `https://www.tiktok.com/${newCreator.userId}`,
       email: newCreator.email,
@@ -255,30 +266,42 @@ export function SeedingCreatorsPage() {
       likes: parseInt(newCreator.likes) || 0,
       reasonableRate: parseFloat(newCreator.reasonableRate) || 0,
       offerRate: parseFloat(newCreator.offerRate) || 0,
-      country: newCreator.country || undefined,
+      category: newCreator.category || '미분류',
       tags: newCreator.tags ? newCreator.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
-      notes: newCreator.notes || undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-
-    addCreator(creator);
-    setIsAddModalOpen(false);
     
-    // 폼 초기화
-    setNewCreator({
-      userId: '',
-      profileLink: '',
-      email: '',
-      followers: '',
-      posts: '',
-      likes: '',
-      reasonableRate: '',
-      offerRate: '',
-      country: '',
-      tags: '',
-      notes: '',
-    });
+    // Firebase는 undefined 허용 안함 - 값이 있을 때만 추가
+    if (newCreator.country) creatorData.country = newCreator.country;
+    if (newCreator.notes) creatorData.notes = newCreator.notes;
+
+    try {
+      // 10k 패턴: Firebase에 직접 저장 (setDocument 사용)
+      await setDocument('seeding-creators', creatorId, creatorData);
+      
+      // 성공 - 로컬 스토어는 실시간 동기화로 자동 업데이트됨
+      setIsAddModalOpen(false);
+      
+      // 폼 초기화
+      setNewCreator({
+        userId: '',
+        profileLink: '',
+        email: '',
+        followers: '',
+        posts: '',
+        likes: '',
+        reasonableRate: '',
+        offerRate: '',
+        category: '미분류',
+        country: '',
+        tags: '',
+        notes: '',
+      });
+    } catch (error) {
+      console.error('Error adding creator:', error);
+      alert('크리에이터 추가 실패');
+    }
   };
 
   // CSV 업로드 핸들러
@@ -291,27 +314,34 @@ export function SeedingCreatorsPage() {
       const parsedData = parseCSV(text);
       const parsedCreators = parseCreatorsFromCSV(parsedData);
       
-      // 완전한 Creator 객체로 변환
-      const completeCreators: Creator[] = parsedCreators.map(partial => ({
-        id: `creator-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        userId: partial.userId || '',
-        profileLink: partial.profileLink || '',
-        email: partial.email || '',
-        followers: partial.followers || 0,
-        posts: partial.posts || 0,
-        likes: partial.likes || 0,
-        reasonableRate: partial.reasonableRate || 0,
-        offerRate: partial.offerRate || 0,
-        country: partial.country,
-        tags: partial.tags,
-        notes: partial.notes,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }));
+      // 10k 패턴: Firebase에 각각 저장
+      for (const partial of parsedCreators) {
+        const creatorId = `creator-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const creatorData: any = {
+          id: creatorId,
+          userId: partial.userId || '',
+          profileLink: partial.profileLink || '',
+          email: partial.email || '',
+          followers: partial.followers || 0,
+          posts: partial.posts || 0,
+          likes: partial.likes || 0,
+          reasonableRate: partial.reasonableRate || 0,
+          offerRate: partial.offerRate || 0,
+          category: '미분류',
+          tags: partial.tags || [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        
+        // Firebase는 undefined 허용 안함 - 값이 있을 때만 추가
+        if (partial.country) creatorData.country = partial.country;
+        if (partial.notes) creatorData.notes = partial.notes;
+        
+        await setDocument('seeding-creators', creatorId, creatorData);
+      }
       
-      addCreators(completeCreators);
       setIsUploadModalOpen(false);
-      alert(`${completeCreators.length}명의 크리에이터가 추가되었습니다!`);
+      alert(`${parsedCreators.length}명의 크리에이터가 추가되었습니다!`);
     } catch (error) {
       console.error('CSV 업로드 오류:', error);
       alert('CSV 파일을 처리하는 중 오류가 발생했습니다.');
@@ -333,6 +363,96 @@ export function SeedingCreatorsPage() {
   const handleDownloadTemplate = () => {
     const template = getCreatorTemplateCSV();
     downloadCSV(template, 'creator-template.csv');
+  };
+
+  // 크리에이터 삭제 (10k 패턴)
+  const handleDeleteCreator = async (creator: Creator) => {
+    if (!confirm(`${creator.userId}를 삭제하시겠습니까?`)) return;
+
+    try {
+      // Firebase에서 삭제
+      await deleteDocument('seeding-creators', creator.id);
+      // 로컬 스토어는 실시간 동기화로 자동 업데이트됨
+    } catch (error) {
+      console.error('Error deleting creator:', error);
+      alert('크리에이터 삭제 실패');
+    }
+  };
+
+  // 크리에이터 수정 모달 열기
+  const handleEditCreator = (creator: Creator) => {
+    setNewCreator({
+      userId: creator.userId,
+      profileLink: creator.profileLink,
+      email: creator.email,
+      followers: creator.followers.toString(),
+      posts: creator.posts.toString(),
+      likes: creator.likes.toString(),
+      reasonableRate: creator.reasonableRate.toString(),
+      offerRate: creator.offerRate.toString(),
+      category: creator.category || '미분류',
+      country: creator.country || '',
+      tags: creator.tags?.join(', ') || '',
+      notes: creator.notes || '',
+    });
+    setSelectedCreator(creator);
+    setIsAddModalOpen(true);
+  };
+
+  // 크리에이터 수정 저장 (10k 패턴)
+  const handleUpdateCreator = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!selectedCreator || !newCreator.userId || !newCreator.email) {
+      alert('User ID와 Email은 필수입니다.');
+      return;
+    }
+
+    const updatedData: any = {
+      userId: newCreator.userId,
+      profileLink: newCreator.profileLink || `https://www.tiktok.com/${newCreator.userId}`,
+      email: newCreator.email,
+      followers: parseInt(newCreator.followers) || 0,
+      posts: parseInt(newCreator.posts) || 0,
+      likes: parseInt(newCreator.likes) || 0,
+      reasonableRate: parseFloat(newCreator.reasonableRate) || 0,
+      offerRate: parseFloat(newCreator.offerRate) || 0,
+      category: newCreator.category || '미분류',
+      tags: newCreator.tags ? newCreator.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+      updatedAt: new Date().toISOString(),
+    };
+    
+    // Firebase는 undefined 허용 안함
+    if (newCreator.country) updatedData.country = newCreator.country;
+    if (newCreator.notes) updatedData.notes = newCreator.notes;
+
+    try {
+      // Firebase에 업데이트
+      await updateDocument('seeding-creators', selectedCreator.id, updatedData);
+      
+      // 성공 - 로컬 스토어는 실시간 동기화로 자동 업데이트됨
+      setIsAddModalOpen(false);
+      setSelectedCreator(null);
+      
+      // 폼 초기화
+      setNewCreator({
+        userId: '',
+        profileLink: '',
+        email: '',
+        followers: '',
+        posts: '',
+        likes: '',
+        reasonableRate: '',
+        offerRate: '',
+        category: '미분류',
+        country: '',
+        tags: '',
+        notes: '',
+      });
+    } catch (error) {
+      console.error('Error updating creator:', error);
+      alert('크리에이터 수정 실패');
+    }
   };
 
   return (
@@ -442,13 +562,30 @@ export function SeedingCreatorsPage() {
         <DataTable table={table} />
       </div>
 
-      {/* 수동 추가 모달 */}
+      {/* 수동 추가/수정 모달 */}
       <Modal
         isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        title="크리에이터 수동 추가"
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setSelectedCreator(null);
+          setNewCreator({
+            userId: '',
+            profileLink: '',
+            email: '',
+            followers: '',
+            posts: '',
+            likes: '',
+            reasonableRate: '',
+            offerRate: '',
+            category: '미분류',
+            country: '',
+            tags: '',
+            notes: '',
+          });
+        }}
+        title={selectedCreator ? '크리에이터 수정' : '크리에이터 수동 추가'}
       >
-        <form onSubmit={handleAddCreator} className="space-y-4">
+        <form onSubmit={selectedCreator ? handleUpdateCreator : handleAddCreator} className="space-y-4">
           {/* TokAPI 정보 가져오기 */}
           <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
             <h4 className="font-semibold text-blue-300 mb-2">TikTok 정보 자동 가져오기</h4>
@@ -639,11 +776,28 @@ export function SeedingCreatorsPage() {
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => {
+              setIsAddModalOpen(false);
+              setSelectedCreator(null);
+              setNewCreator({
+                userId: '',
+                profileLink: '',
+                email: '',
+                followers: '',
+                posts: '',
+                likes: '',
+                reasonableRate: '',
+                offerRate: '',
+                category: '미분류',
+                country: '',
+                tags: '',
+                notes: '',
+              });
+            }}>
               취소
             </Button>
             <Button type="submit">
-              추가하기
+              {selectedCreator ? '수정하기' : '추가하기'}
             </Button>
           </div>
         </form>
