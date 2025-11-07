@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { BrowserRouter } from 'react-router-dom';
 import { auth, db } from './lib/firebase/config';
 import { useAuthStore } from './store/useAuthStore';
@@ -25,10 +25,20 @@ const Auth: React.FC = () => {
           if (userDocSnap.exists()) {
             setAppUser(userDocSnap.data() as AppUser);
           } else {
-            setAppUser(null);
+            // Create new user document with pending status
+            const newUser: AppUser = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              role: 'user',
+              status: 'pending',
+            };
+            
+            await setDoc(userDocRef, newUser);
+            console.log('✅ New user document created:', newUser.email);
+            setAppUser(newUser);
           }
         } catch (error) {
-          console.error('Error fetching user document:', error);
+          console.error('Error fetching/creating user document:', error);
           setAppUser(null);
         }
       } else {

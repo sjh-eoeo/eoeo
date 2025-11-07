@@ -9,9 +9,15 @@
  * - PATCH: 버그 수정
  */
 
-export const VERSION = '2.0.5';
+export const VERSION = '2.0.6';
 export const BUILD_DATE = '2025-01-07';
 export const RELEASE_NOTES = {
+  '2.0.6': [
+    '✅ 새 사용자 자동 등록 기능 추가',
+    '🔐 Firestore 규칙 수정 - 사용자가 자신의 계정 생성 가능',
+    '🆕 첫 로그인 시 자동으로 users 컬렉션에 추가 (pending 상태)',
+    '⚡ 관리자 승인 대기 메시지 자동 표시',
+  ],
   '2.0.5': [
     '🔧 운송장 번호 입력 UX 개선',
     '✅ 저장 버튼 추가 - 입력 완료 후 한 번만 저장',
