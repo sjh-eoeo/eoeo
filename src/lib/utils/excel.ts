@@ -34,17 +34,17 @@ export function parseCSV(csvText: string): any[] {
  */
 export function parseCreatorsFromCSV(csvData: any[]): Omit<Creator, 'id' | 'createdAt' | 'updatedAt' | 'stats'>[] {
   return csvData.map((row) => ({
-    name: row.name || row.Name || '',
+    userId: row.userId || row.UserId || row['User ID'] || '',
+    profileLink: row.profileLink || row.ProfileLink || row['Profile Link'] || '',
     email: row.email || row.Email || '',
+    followers: parseInt(row.followers || row.Followers || '0', 10),
+    posts: parseInt(row.posts || row.Posts || '0', 10),
+    likes: parseInt(row.likes || row.Likes || '0', 10),
+    reasonableRate: parseFloat(row.reasonableRate || row.ReasonableRate || row['Reasonable Rate'] || '0'),
+    offerRate: parseFloat(row.offerRate || row.OfferRate || row['Offer Rate'] || '0'),
     country: row.country || row.Country || '',
-    socialHandles: {
-      tiktok: row.tiktok || row.TikTok || row['TikTok Handle'] || '',
-      instagram: row.instagram || row.Instagram || row['Instagram Handle'] || '',
-      youtube: row.youtube || row.YouTube || row['YouTube Channel'] || '',
-    },
-    contactInfo: row.contact || row.Contact || row['Contact Info'] || '',
     tags: (row.tags || row.Tags || '').split('|').filter(Boolean),
-    blacklisted: false,
+    blacklisted: (row.blacklisted || row.Blacklisted || 'false').toLowerCase() === 'true',
     notes: row.notes || row.Notes || '',
   }));
 }

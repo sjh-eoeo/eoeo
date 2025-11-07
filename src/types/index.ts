@@ -77,3 +77,21 @@ export interface AppUser {
   role: UserRole;
 }
 
+// Activity Log Types
+export type ActivityAction = 
+  | 'create'
+  | 'update'
+  | 'delete'
+  | 'upload'
+  | 'download'
+  | 'approve'
+  | 'reject';
+
+export type ActivityCollection = 
+  | 'videos'
+  | 'profiles'
+  | 'payments'
+  | 'shipping'
+  | 'users'
+  | 'brands';
+
