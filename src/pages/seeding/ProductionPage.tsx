@@ -3,9 +3,11 @@ import { useSeedingProjectStore } from '../../store/useSeedingProjectStore';
 import { useSeedingNegotiationStore } from '../../store/useSeedingNegotiationStore';
 import { useSeedingDraftStore } from '../../store/useSeedingDraftStore';
 import { useAuthStore } from '../../store/useAuthStore';
+import { useLastViewedStore } from '../../store/useLastViewedStore';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { DataTable } from '../../components/ui/DataTable';
+import { getRecentUpdateClass } from '../../lib/utils/highlight';
 import {
   createColumnHelper,
   useReactTable,
@@ -23,6 +25,7 @@ export function SeedingProductionPage() {
   const { projects } = useSeedingProjectStore();
   const { negotiations } = useSeedingNegotiationStore();
   const { drafts, addDraft, addComment, approveDraft, requestRevision } = useSeedingDraftStore();
+  const { markAsViewed, getLastViewed } = useLastViewedStore();
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedNegotiationId, setSelectedNegotiationId] = useState<string>('');
@@ -36,12 +39,19 @@ export function SeedingProductionPage() {
     fileSize: 0,
   });
 
-  // 협상 완료된 내역만 표시
+  // 협상 완료된 내역만 표시 (최신 업데이트 순으로 정렬)
   const completedNegotiations = useMemo(() => {
     if (!selectedProjectId) return [];
-    return negotiations.filter(
+    const filtered = negotiations.filter(
       n => n.projectId === selectedProjectId && n.status === 'completed'
     );
+    
+    // updatedAt 기준으로 내림차순 정렬 (최신순)
+    return filtered.sort((a, b) => {
+      const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return timeB - timeA;
+    });
   }, [selectedProjectId, negotiations]);
 
   // 선택된 협상
@@ -225,7 +235,23 @@ export function SeedingProductionPage() {
             {completedNegotiations.length === 0 ? (
               <p className="text-sm text-gray-400">협상이 완료된 크리에이터가 없습니다.</p>
             ) : (
-              <DataTable table={table} />
+              <DataTable 
+                table={table}
+                getRowClassName={(negotiation: Negotiation) => {
+                  const project = projects.find(p => p.id === selectedProjectId);
+                  return getRecentUpdateClass(
+                    negotiation.id,
+                    negotiation.updatedAt,
+                    project?.assignees,
+                    appUser?.email,
+                    getLastViewed(negotiation.id),
+                    5 // 5분 이내
+                  );
+                }}
+                onRowClick={(negotiation: Negotiation) => {
+                  markAsViewed(negotiation.id);
+                }}
+              />
             )}
           </div>
 

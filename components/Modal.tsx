@@ -29,15 +29,21 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, title, size = 
       onClick={onClose}
     >
       <div 
-        className={`bg-gray-800 rounded-lg shadow-xl w-full ${sizeClass} max-h-[90vh] flex flex-col border border-gray-600 transform transition-transform duration-300 scale-95`}
+        className={`bg-gray-800 rounded-lg shadow-xl w-full ${sizeClass} max-h-[90vh] flex flex-col border border-gray-600 transform transition-transform duration-300 scale-95 overflow-hidden`}
         onClick={e => e.stopPropagation()} // Prevent closing modal when clicking inside
         style={{ transform: isOpen ? 'scale(1)' : 'scale(0.95)' }}
       >
-        <header className="flex justify-between items-center p-4 border-b border-gray-700 flex-shrink-0">
-          <h3 className="text-lg font-semibold text-white truncate">{title || 'Details'}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl font-bold leading-none">&times;</button>
+        <header className="flex justify-between items-center gap-4 p-4 border-b border-gray-700 flex-shrink-0">
+          <h3 className="text-lg font-semibold text-white truncate break-words">{title || 'Details'}</h3>
+          <button 
+            onClick={onClose} 
+            className="text-gray-400 hover:text-white text-2xl font-bold leading-none flex-shrink-0"
+            aria-label="Close modal"
+          >
+            &times;
+          </button>
         </header>
-        <main className="p-6 overflow-y-auto">
+        <main className="p-6 overflow-y-auto overflow-x-hidden break-words">
           {children}
         </main>
       </div>

@@ -4,12 +4,14 @@ import { useSeedingCreatorStore } from '../../store/useSeedingCreatorStore';
 import { useSeedingReachOutStore } from '../../store/useSeedingReachOutStore';
 import { useSeedingNegotiationStore } from '../../store/useSeedingNegotiationStore';
 import { useAuthStore } from '../../store/useAuthStore';
+import { useLastViewedStore } from '../../store/useLastViewedStore';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { DataTable } from '../../components/ui/DataTable';
 import { Modal } from '../../components/ui/Modal';
 import { formatNumber, formatCurrency } from '../../lib/utils/seedingCsv';
+import { getRecentUpdateClass } from '../../lib/utils/highlight';
 import {
   createColumnHelper,
   useReactTable,
@@ -38,6 +40,7 @@ export function SeedingNegotiationPage() {
   const { creators } = useSeedingCreatorStore();
   const { reachOuts } = useSeedingReachOutStore();
   const { negotiations, addNegotiation, updateTerms, addMessage, setTrackingNumber, completeNegotiation } = useSeedingNegotiationStore();
+  const { lastViewed, markAsViewed, getLastViewed } = useLastViewedStore();
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedNegotiationId, setSelectedNegotiationId] = useState<string>('');
@@ -45,11 +48,22 @@ export function SeedingNegotiationPage() {
   const [chatInput, setChatInput] = useState('');
   const [isCreatorDetailModalOpen, setIsCreatorDetailModalOpen] = useState(false);
 
-  // 선택된 프로젝트의 interested 크리에이터들
+  // 선택된 프로젝트의 interested 크리에이터들 (협상 업데이트 시간 기준 정렬)
   const interestedReachOuts = useMemo(() => {
     if (!selectedProjectId) return [];
-    return reachOuts.filter(ro => ro.projectId === selectedProjectId && ro.status === 'interested');
-  }, [selectedProjectId, reachOuts]);
+    const filtered = reachOuts.filter(ro => ro.projectId === selectedProjectId && ro.status === 'interested');
+    
+    // 협상의 updatedAt 기준으로 정렬
+    return filtered.sort((a, b) => {
+      const negotiationA = negotiations.find(n => n.projectId === selectedProjectId && n.creatorId === a.creatorId);
+      const negotiationB = negotiations.find(n => n.projectId === selectedProjectId && n.creatorId === b.creatorId);
+      
+      const timeA = negotiationA?.updatedAt ? new Date(negotiationA.updatedAt).getTime() : 0;
+      const timeB = negotiationB?.updatedAt ? new Date(negotiationB.updatedAt).getTime() : 0;
+      
+      return timeB - timeA; // 최신순 (내림차순)
+    });
+  }, [selectedProjectId, reachOuts, negotiations]);
 
   // 선택된 협상
   const selectedNegotiation = useMemo(() => {
@@ -226,7 +240,7 @@ export function SeedingNegotiationPage() {
   ], [negotiations, selectedProjectId, selectedNegotiationId]);
 
   const tableState = useTableState({
-    initialSorting: [{ id: 'updatedAt', desc: true }],
+    initialSorting: [],
   });
   const table = useReactTable({
     data: interestedReachOuts,
@@ -396,7 +410,36 @@ export function SeedingNegotiationPage() {
             {interestedReachOuts.length === 0 ? (
               <p className="text-sm text-gray-400">관심 표명한 크리에이터가 없습니다.</p>
             ) : (
-              <DataTable table={table} />
+              <DataTable 
+                table={table}
+                getRowClassName={(reachOut: ReachOut) => {
+                  // 해당 크리에이터의 협상 찾기
+                  const negotiation = negotiations.find(
+                    n => n.projectId === selectedProjectId && n.creatorId === reachOut.creatorId
+                  );
+                  if (!negotiation) return '';
+                  
+                  // 선택된 프로젝트의 담당자 목록
+                  const project = projects.find(p => p.id === selectedProjectId);
+                  
+                  return getRecentUpdateClass(
+                    negotiation.id,
+                    negotiation.updatedAt,
+                    project?.assignees,
+                    appUser?.email,
+                    getLastViewed(negotiation.id),
+                    5 // 5분 이내
+                  );
+                }}
+                onRowClick={(reachOut: ReachOut) => {
+                  const negotiation = negotiations.find(
+                    n => n.projectId === selectedProjectId && n.creatorId === reachOut.creatorId
+                  );
+                  if (negotiation) {
+                    markAsViewed(negotiation.id);
+                  }
+                }}
+              />
             )}
           </div>
 

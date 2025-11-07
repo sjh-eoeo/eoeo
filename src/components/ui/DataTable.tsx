@@ -8,12 +8,16 @@ interface DataTableProps<TData> {
   table: TanStackTable<TData>;
   isLoading?: boolean;
   emptyMessage?: string;
+  getRowClassName?: (row: TData) => string;
+  onRowClick?: (row: TData) => void;
 }
 
 export function DataTable<TData>({
   table,
   isLoading = false,
   emptyMessage = 'No data available',
+  getRowClassName,
+  onRowClick,
 }: DataTableProps<TData>) {
   const rows = table.getRowModel().rows;
 
@@ -67,18 +71,22 @@ export function DataTable<TData>({
           </thead>
           <tbody>
             {rows.length > 0 ? (
-              rows.map((row) => (
-                <tr
-                  key={row.id}
-                  className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors"
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-6 py-2">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              rows.map((row) => {
+                const customClassName = getRowClassName ? getRowClassName(row.original) : '';
+                return (
+                  <tr
+                    key={row.id}
+                    className={`bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors ${customClassName}`}
+                    onClick={() => onRowClick && onRowClick(row.original)}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="px-6 py-2 break-words max-w-xs overflow-hidden">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })
             ) : (
               <tr>
                 <td

@@ -4,9 +4,11 @@ import { useSeedingNegotiationStore } from '../../store/useSeedingNegotiationSto
 import { useSeedingDraftStore } from '../../store/useSeedingDraftStore';
 import { useSeedingPaymentStore } from '../../store/useSeedingPaymentStore';
 import { useAuthStore } from '../../store/useAuthStore';
+import { useLastViewedStore } from '../../store/useLastViewedStore';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { DataTable } from '../../components/ui/DataTable';
+import { getRecentUpdateClass } from '../../lib/utils/highlight';
 import {
   createColumnHelper,
   useReactTable,
@@ -25,6 +27,7 @@ export function SeedingPaymentPage() {
   const { negotiations } = useSeedingNegotiationStore();
   const { drafts } = useSeedingDraftStore();
   const { payments, addPayment, processPayment, completePayment } = useSeedingPaymentStore();
+  const { markAsViewed, getLastViewed } = useLastViewedStore();
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedNegotiationId, setSelectedNegotiationId] = useState<string>('');
@@ -36,11 +39,11 @@ export function SeedingPaymentPage() {
     receiptUrl: '',
   });
 
-  // 드래프트가 승인된 협상만 표시
+  // 드래프트가 승인된 협상만 표시 (최신 업데이트 순으로 정렬)
   const negotiationsWithApprovedDrafts = useMemo(() => {
     if (!selectedProjectId) return [];
     
-    return negotiations.filter(n => {
+    const filtered = negotiations.filter(n => {
       if (n.projectId !== selectedProjectId || n.status !== 'completed') return false;
       
       // 이 협상에 승인된 드래프트가 있는지 확인
@@ -49,6 +52,13 @@ export function SeedingPaymentPage() {
       );
       
       return !!approvedDraft;
+    });
+    
+    // updatedAt 기준으로 내림차순 정렬 (최신순)
+    return filtered.sort((a, b) => {
+      const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return timeB - timeA;
     });
   }, [selectedProjectId, negotiations, drafts]);
 
@@ -291,7 +301,23 @@ export function SeedingPaymentPage() {
             {negotiationsWithApprovedDrafts.length === 0 ? (
               <p className="text-sm text-gray-400">승인된 드래프트가 없습니다.</p>
             ) : (
-              <DataTable table={table} />
+              <DataTable 
+                table={table}
+                getRowClassName={(negotiation: Negotiation) => {
+                  const project = projects.find(p => p.id === selectedProjectId);
+                  return getRecentUpdateClass(
+                    negotiation.id,
+                    negotiation.updatedAt,
+                    project?.assignees,
+                    appUser?.email,
+                    getLastViewed(negotiation.id),
+                    5 // 5분 이내
+                  );
+                }}
+                onRowClick={(negotiation: Negotiation) => {
+                  markAsViewed(negotiation.id);
+                }}
+              />
             )}
           </div>
 

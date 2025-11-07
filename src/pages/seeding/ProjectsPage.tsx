@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSeedingProjectStore } from '../../store/useSeedingProjectStore';
 import { useSeedingBrandStore } from '../../store/useSeedingBrandStore';
@@ -18,7 +18,10 @@ import {
 } from '@tanstack/react-table';
 import { useTableState } from '../../hooks/useTableState';
 import { creatorsToCSV, downloadCSV } from '../../lib/utils/seedingCsv';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../../lib/firebase/config';
 import type { Project, Brand } from '../../types/seeding';
+import type { AppUser } from '../../types';
 
 const columnHelper = createColumnHelper<Project>();
 
@@ -59,6 +62,8 @@ export function SeedingProjectsPage() {
   // 담당자 관리 상태
   const [assigneeInput, setAssigneeInput] = useState('');
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const [registeredUsers, setRegisteredUsers] = useState<AppUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   // 이메일 템플릿 상태
   const [emailTemplates, setEmailTemplates] = useState<Array<{
@@ -67,6 +72,28 @@ export function SeedingProjectsPage() {
     subject: string;
     body: string;
   }>>([]);
+
+  // Firestore에서 가입된 유저 목록 가져오기
+  useEffect(() => {
+    const fetchUsers = async () => {
+      setLoadingUsers(true);
+      try {
+        const usersCollection = collection(db, 'users');
+        const usersSnapshot = await getDocs(usersCollection);
+        const usersList = usersSnapshot.docs.map(doc => ({
+          uid: doc.id,
+          ...doc.data(),
+        })) as AppUser[];
+        setRegisteredUsers(usersList);
+      } catch (error) {
+        console.error('Failed to fetch users:', error);
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+
+    fetchUsers();
+  }, []);
 
   // 필터링된 크리에이터 (선택 모달용)
   const filteredCreatorsForSelection = useMemo(() => {
@@ -718,26 +745,88 @@ export function SeedingProjectsPage() {
           title={`담당자 관리 - ${selectedProject.name}`}
         >
           <div className="space-y-6">
-            {/* 담당자 추가 */}
+            {/* 가입된 유저 목록에서 선택 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-3">
+                가입된 사용자 목록
+              </label>
+              {loadingUsers ? (
+                <div className="text-center py-8 text-gray-400">
+                  사용자 목록 로딩 중...
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto border border-gray-700 rounded-lg p-3 bg-gray-800">
+                  {registeredUsers.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-4">
+                      등록된 사용자가 없습니다.
+                    </p>
+                  ) : (
+                    registeredUsers.map((user) => {
+                      const isAlreadyAssigned = selectedAssignees.includes(user.email || '');
+                      return (
+                        <label
+                          key={user.uid}
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                            isAlreadyAssigned
+                              ? 'bg-cyan-900/30 border-cyan-600 cursor-not-allowed'
+                              : 'bg-gray-700 border-gray-600 hover:border-gray-500'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isAlreadyAssigned}
+                            onChange={() => {
+                              if (!isAlreadyAssigned && user.email) {
+                                setSelectedAssignees([...selectedAssignees, user.email]);
+                              }
+                            }}
+                            disabled={isAlreadyAssigned}
+                            className="w-4 h-4"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-white">{user.email}</span>
+                              {user.role && (
+                                <Badge variant={user.role === 'admin' ? 'success' : 'default'} className="text-xs">
+                                  {user.role}
+                                </Badge>
+                              )}
+                            </div>
+                            {user.status && (
+                              <div className="text-xs text-gray-400">
+                                상태: {user.status}
+                              </div>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 또는 직접 입력 */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                담당자 이메일 추가
+                또는 직접 이메일 입력
               </label>
-              <div className="flex gap-2">
-                <Input
-                  type="email"
-                  value={assigneeInput}
-                  onChange={(e) => setAssigneeInput(e.target.value)}
-                  placeholder="user@example.com"
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddAssignee();
-                    }
-                  }}
-                  className="flex-1"
-                />
-                <Button onClick={handleAddAssignee}>
+              <div className="flex flex-row gap-2 items-start">
+                <div className="flex-1">
+                  <Input
+                    type="email"
+                    value={assigneeInput}
+                    onChange={(e) => setAssigneeInput(e.target.value)}
+                    placeholder="user@example.com"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddAssignee();
+                      }
+                    }}
+                  />
+                </div>
+                <Button onClick={handleAddAssignee} className="whitespace-nowrap flex-shrink-0">
                   추가
                 </Button>
               </div>
