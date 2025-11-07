@@ -24,24 +24,24 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     
-    // Videos collection - authenticated active users can read/write
+    // Videos collection - all authenticated users can read/write
     match /videos/{videoId} {
-      allow read: if isAuthenticated() && isActive();
-      allow write: if isAuthenticated() && isActive();
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
       allow delete: if isAdmin();
     }
     
-    // Profiles collection - authenticated active users can read/write
+    // Profiles collection - all authenticated users can read/write
     match /profiles/{profileId} {
-      allow read: if isAuthenticated() && isActive();
-      allow write: if isAuthenticated() && isActive();
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
       allow delete: if isAdmin();
     }
     
-    // Payments collection - authenticated active users can read/write
+    // Payments collection - all authenticated users can read/write
     match /payments/{paymentId} {
-      allow read: if isAuthenticated() && isActive();
-      allow write: if isAuthenticated() && isActive();
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
       allow delete: if isAdmin();
     }
     
