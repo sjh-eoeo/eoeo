@@ -1,4 +1,4 @@
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { storage } from '../lib/firebase/config';
 
 /**
@@ -42,8 +42,22 @@ export const useStorage = () => {
     }
   };
 
+  /**
+   * Delete a file from Firebase Storage
+   */
+  const deleteFile = async (path: string): Promise<void> => {
+    try {
+      const storageRef = ref(storage, path);
+      await deleteObject(storageRef);
+    } catch (error) {
+      console.error(`Error deleting file at ${path}:`, error);
+      throw error;
+    }
+  };
+
   return {
     uploadFile,
     getFileURL,
+    deleteFile,
   };
 };

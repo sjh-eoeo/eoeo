@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>초대 알림 디버깅 v2</title>YPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>알림 디버깅 도구</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1, h2 { color: #00ffff; }
+        .section {
+            background: #2a2a2a;
+            border: 2px solid #00ff00;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        button {
+            background: #00ff00;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 3px;
+        }
+        button:hover {
+            background: #00ffff;
+        }
+        .error { color: #ff0000; }
+        .success { color: #00ff00; }
+        .warning { color: #ffff00; }
+        .info { color: #00ffff; }
+        pre {
+            background: #000;
+            padding: 10px;
+            border-radius: 3px;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #00ff00;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background: #003300;
+        }
+        .match { color: #00ff00; }
+        .nomatch { color: #ff0000; }
+    </style>
+</head>
+<body>
+    <h1>🔍 프로젝트 초대 알림 디버깅 도구</h1>
+
+    <div class="section">
+        <h2>1️⃣ 현재 로그인 사용자 확인</h2>
+        <button onclick="checkCurrentUser()">내 정보 확인</button>
+        <pre id="current-user"></pre>
+    </div>
+
+    <div class="section">
+        <h2>2️⃣ 모든 초대 목록 확인</h2>
+        <button onclick="checkAllInvitations()">전체 초대 보기</button>
+        <div id="all-invitations"></div>
+    </div>
+
+    <div class="section">
+        <h2>3️⃣ 내 초대 매칭 테스트</h2>
+        <button onclick="testMatching()">매칭 테스트</button>
+        <div id="matching-result"></div>
+    </div>
+
+    <div class="section">
+        <h2>4️⃣ 프로젝트 메타데이터 확인</h2>
+        <button onclick="checkProjectMetadata()">프로젝트 목록 보기</button>
+        <div id="project-metadata"></div>
+    </div>
+
+    <div class="section">
+        <h2>5️⃣ Firestore 사용자 목록 (수동 입력 필요)</h2>
+        <p class="info">Admin 페이지 → 프로젝트 추가 → 참여자 드롭다운에서 확인 가능</p>
+        <textarea id="firestore-users" rows="10" style="width: 100%; background: #000; color: #00ff00; border: 1px solid #00ff00; padding: 10px;" placeholder='[
+  {"email": "sjh@egongegong.com", "name": "SJH", "role": "admin"},
+  {"email": "junhoi90@gmail.com", "name": "Junhoi", "role": "user"}
+]'></textarea>
+        <button onclick="compareWithFirestore()">Firestore와 비교</button>
+        <div id="firestore-comparison"></div>
+    </div>
+
+    <div class="section">
+        <h2>6️⃣ 강제 초대 생성 (테스트용)</h2>
+        <input type="text" id="test-email" placeholder="초대할 이메일 (예: junhoi90@gmail.com)" style="width: 300px; background: #000; color: #00ff00; border: 1px solid #00ff00; padding: 8px;">
+        <button onclick="createTestInvitation()">테스트 초대 생성</button>
+        <pre id="test-result"></pre>
+    </div>
+
+    <div class="section">
+        <h2>7️⃣ 데이터 초기화</h2>
+        <button onclick="clearInvitations()" style="background: #ff0000; color: #fff;">초대 데이터 삭제</button>
+        <button onclick="clearAllData()" style="background: #ff6600; color: #fff;">모든 데이터 삭제 (주의!)</button>
+        <pre id="clear-result"></pre>
+    </div>
+
+    <script>
+        function checkCurrentUser() {
+            try {
+                const authStorage = localStorage.getItem('auth-storage');
+                if (!authStorage) {
+                    document.getElementById('current-user').innerHTML = '<span class="error">❌ 로그인되지 않음</span>';
+                    return;
+                }
+                
+                const auth = JSON.parse(authStorage);
+                const user = auth?.state?.appUser;
+                
+                if (!user) {
+                    document.getElementById('current-user').innerHTML = '<span class="error">❌ 사용자 정보 없음</span>';
+                    return;
+                }
+                
+                const normalized = user.email?.trim().toLowerCase();
+                
+                document.getElementById('current-user').innerHTML = `
+<span class="success">✅ 로그인됨</span>
+
+<span class="info">📧 이메일 (원본):</span> ${user.email}
+<span class="info">📧 이메일 (정규화):</span> ${normalized}
+<span class="info">👤 이름:</span> ${user.name || 'N/A'}
+<span class="info">🔑 역할:</span> ${user.role || 'N/A'}
+<span class="info">🆔 UID:</span> ${user.uid || 'N/A'}
+
+<span class="warning">⚠️  알림은 정규화된 이메일로 매칭됩니다!</span>
+                `;
+            } catch (error) {
+                document.getElementById('current-user').innerHTML = `<span class="error">❌ 오류: ${error.message}</span>`;
+            }
+        }
+
+        function checkAllInvitations() {
+            try {
+                const invitationsStr = localStorage.getItem('project-invitations');
+                if (!invitationsStr) {
+                    document.getElementById('all-invitations').innerHTML = '<span class="warning">⚠️  저장된 초대가 없습니다</span>';
+                    return;
+                }
+                
+                const invitations = JSON.parse(invitationsStr);
+                
+                if (invitations.length === 0) {
+                    document.getElementById('all-invitations').innerHTML = '<span class="warning">⚠️  초대 목록이 비어있습니다</span>';
+                    return;
+                }
+                
+                let html = `<span class="success">✅ 총 ${invitations.length}개의 초대</span>`;
+                html += `<table>
+                    <tr>
+                        <th>번호</th>
+                        <th>초대된 이메일</th>
+                        <th>프로젝트</th>
+                        <th>브랜드</th>
+                        <th>초대한 사람</th>
+                        <th>날짜</th>
+                        <th>읽음</th>
+                    </tr>`;
+                
+                invitations.forEach((inv, idx) => {
+                    const normalized = inv.invitedEmail.trim().toLowerCase();
+                    html += `<tr>
+                        <td>${idx + 1}</td>
+                        <td>
+                            <div>${inv.invitedEmail}</div>
+                            <div class="info" style="font-size: 0.9em;">(정규화: ${normalized})</div>
+                        </td>
+                        <td>${inv.projectName}</td>
+                        <td>${inv.brand}</td>
+                        <td>${inv.invitedBy}</td>
+                        <td>${new Date(inv.invitedAt).toLocaleString('ko-KR')}</td>
+                        <td>${inv.isRead ? '✅' : '❌'}</td>
+                    </tr>`;
+                });
+                
+                html += '</table>';
+                document.getElementById('all-invitations').innerHTML = html;
+            } catch (error) {
+                document.getElementById('all-invitations').innerHTML = `<span class="error">❌ 오류: ${error.message}</span>`;
+            }
+        }
+
+        function testMatching() {
+            try {
+                const authStorage = localStorage.getItem('auth-storage');
+                const invitationsStr = localStorage.getItem('project-invitations');
+                
+                if (!authStorage) {
+                    document.getElementById('matching-result').innerHTML = '<span class="error">❌ 로그인되지 않음</span>';
+                    return;
+                }
+                
+                if (!invitationsStr) {
+                    document.getElementById('matching-result').innerHTML = '<span class="warning">⚠️  저장된 초대가 없습니다</span>';
+                    return;
+                }
+                
+                const auth = JSON.parse(authStorage);
+                const user = auth?.state?.appUser;
+                const invitations = JSON.parse(invitationsStr);
+                
+                const myEmail = user.email?.trim().toLowerCase();
+                
+                let html = `<span class="info">🔍 매칭 테스트: ${myEmail}</span><br><br>`;
+                html += '<table><tr><th>초대 이메일</th><th>정규화</th><th>매칭</th><th>프로젝트</th></tr>';
+                
+                let matchCount = 0;
+                
+                invitations.forEach(inv => {
+                    const invEmail = inv.invitedEmail.trim().toLowerCase();
+                    const match = invEmail === myEmail;
+                    
+                    if (match) matchCount++;
+                    
+                    html += `<tr class="${match ? 'match' : 'nomatch'}">
+                        <td>${inv.invitedEmail}</td>
+                        <td>${invEmail}</td>
+                        <td>${match ? '✅ 매칭됨' : '❌ 불일치'}</td>
+                        <td>${inv.projectName}</td>
+                    </tr>`;
+                });
+                
+                html += '</table>';
+                html += `<br><span class="${matchCount > 0 ? 'success' : 'error'}">
+                    ${matchCount > 0 ? '✅' : '❌'} 총 ${matchCount}개의 매칭된 초대
+                </span>`;
+                
+                if (matchCount === 0) {
+                    html += `<br><br><span class="warning">⚠️  가능한 원인:</span><br>
+                    1. 이메일이 정확히 일치하지 않음 (대소문자, 공백 확인)<br>
+                    2. Firestore에 등록된 이메일과 다름<br>
+                    3. Admin이 다른 이메일로 초대함<br>
+                    4. 초대가 아직 생성되지 않음`;
+                }
+                
+                document.getElementById('matching-result').innerHTML = html;
+            } catch (error) {
+                document.getElementById('matching-result').innerHTML = `<span class="error">❌ 오류: ${error.message}</span>`;
+            }
+        }
+
+        function checkProjectMetadata() {
+            try {
+                const metadataStr = localStorage.getItem('negotiation-project-metadata');
+                if (!metadataStr) {
+                    document.getElementById('project-metadata').innerHTML = '<span class="warning">⚠️  프로젝트 메타데이터가 없습니다</span>';
+                    return;
+                }
+                
+                const projects = JSON.parse(metadataStr);
+                
+                let html = `<span class="success">✅ 총 ${projects.length}개의 프로젝트</span>`;
+                html += '<table><tr><th>프로젝트명</th><th>브랜드</th><th>참여자</th><th>생성일</th></tr>';
+                
+                projects.forEach(project => {
+                    html += `<tr>
+                        <td>${project.name}</td>
+                        <td>${project.brand}</td>
+                        <td>
+                            ${project.participants && project.participants.length > 0 
+                                ? project.participants.map(p => `<div>${p}</div>`).join('')
+                                : '<span class="warning">참여자 없음</span>'}
+                        </td>
+                        <td>${new Date(project.createdAt).toLocaleString('ko-KR')}</td>
+                    </tr>`;
+                });
+                
+                html += '</table>';
+                document.getElementById('project-metadata').innerHTML = html;
+            } catch (error) {
+                document.getElementById('project-metadata').innerHTML = `<span class="error">❌ 오류: ${error.message}</span>`;
+            }
+        }
+
+        function compareWithFirestore() {
+            try {
+                const firestoreInput = document.getElementById('firestore-users').value;
+                if (!firestoreInput.trim()) {
+                    document.getElementById('firestore-comparison').innerHTML = '<span class="warning">⚠️  Firestore 사용자 데이터를 입력하세요</span>';
+                    return;
+                }
+                
+                const firestoreUsers = JSON.parse(firestoreInput);
+                const invitationsStr = localStorage.getItem('project-invitations');
+                const authStorage = localStorage.getItem('auth-storage');
+                
+                const auth = JSON.parse(authStorage);
+                const currentUser = auth?.state?.appUser;
+                const myEmail = currentUser?.email?.trim().toLowerCase();
+                
+                let html = '<h3>Firestore 사용자 목록:</h3><table><tr><th>이메일</th><th>이름</th><th>역할</th><th>현재 로그인</th></tr>';
+                
+                firestoreUsers.forEach(user => {
+                    const isMe = user.email.trim().toLowerCase() === myEmail;
+                    html += `<tr class="${isMe ? 'match' : ''}">
+                        <td>${user.email}</td>
+                        <td>${user.name || 'N/A'}</td>
+                        <td>${user.role || 'N/A'}</td>
+                        <td>${isMe ? '✅ 나' : ''}</td>
+                    </tr>`;
+                });
+                html += '</table>';
+                
+                if (invitationsStr) {
+                    const invitations = JSON.parse(invitationsStr);
+                    html += '<h3>초대 상태:</h3><table><tr><th>Firestore 이메일</th><th>초대됨?</th><th>프로젝트</th></tr>';
+                    
+                    firestoreUsers.forEach(user => {
+                        const userEmail = user.email.trim().toLowerCase();
+                        const userInvitations = invitations.filter(inv => 
+                            inv.invitedEmail.trim().toLowerCase() === userEmail
+                        );
+                        
+                        if (userInvitations.length > 0) {
+                            html += `<tr class="match">
+                                <td>${user.email}</td>
+                                <td>✅ ${userInvitations.length}개</td>
+                                <td>${userInvitations.map(inv => inv.projectName).join(', ')}</td>
+                            </tr>`;
+                        } else {
+                            html += `<tr class="nomatch">
+                                <td>${user.email}</td>
+                                <td>❌ 없음</td>
+                                <td>-</td>
+                            </tr>`;
+                        }
+                    });
+                    html += '</table>';
+                }
+                
+                document.getElementById('firestore-comparison').innerHTML = html;
+            } catch (error) {
+                document.getElementById('firestore-comparison').innerHTML = `<span class="error">❌ 오류: ${error.message}</span>`;
+            }
+        }
+
+        function createTestInvitation() {
+            try {
+                const email = document.getElementById('test-email').value.trim();
+                if (!email) {
+                    document.getElementById('test-result').innerHTML = '<span class="error">❌ 이메일을 입력하세요</span>';
+                    return;
+                }
+                
+                const authStorage = localStorage.getItem('auth-storage');
+                const auth = JSON.parse(authStorage);
+                const currentUser = auth?.state?.appUser;
+                
+                const invitation = {
+                    notificationId: `test-inv-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    projectId: 'test-project-' + Date.now(),
+                    projectName: 'Test Project',
+                    brand: 'Test Brand',
+                    invitedBy: currentUser?.email || 'Test Admin',
+                    invitedAt: new Date().toISOString(),
+                    invitedEmail: email.toLowerCase(),
+                    isRead: false
+                };
+                
+                const invitationsStr = localStorage.getItem('project-invitations');
+                const invitations = invitationsStr ? JSON.parse(invitationsStr) : [];
+                invitations.push(invitation);
+                localStorage.setItem('project-invitations', JSON.stringify(invitations));
+                
+                document.getElementById('test-result').innerHTML = `
+<span class="success">✅ 테스트 초대 생성됨!</span>
+
+초대 정보:
+${JSON.stringify(invitation, null, 2)}
+
+<span class="info">💡 이제 ${email} 계정으로 로그인하여 알림을 확인하세요!</span>
+                `;
+            } catch (error) {
+                document.getElementById('test-result').innerHTML = `<span class="error">❌ 오류: ${error.message}</span>`;
+            }
+        }
+
+        function clearInvitations() {
+            if (confirm('정말로 모든 초대 데이터를 삭제하시겠습니까?')) {
+                localStorage.removeItem('project-invitations');
+                document.getElementById('clear-result').innerHTML = '<span class="success">✅ 초대 데이터가 삭제되었습니다</span>';
+            }
+        }
+
+        function clearAllData() {
+            if (confirm('⚠️ 경고: 모든 프로젝트 데이터가 삭제됩니다!\n\n정말로 계속하시겠습니까?')) {
+                localStorage.removeItem('project-invitations');
+                localStorage.removeItem('negotiation-project-metadata');
+                document.getElementById('clear-result').innerHTML = '<span class="success">✅ 모든 데이터가 삭제되었습니다</span>';
+            }
+        }
+    </script>
+</body>
+</html>

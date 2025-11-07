@@ -15,9 +15,9 @@ interface ProfileWithFiles extends Profile {
 }
 
 export const DocsPage: React.FC = () => {
-  const { profiles } = useProfileStore();
+  const { profiles, updateProfile } = useProfileStore();
   const { selectedBrand } = useBrandStore();
-  const { getFileURL } = useStorage();
+  const { getFileURL, deleteFile } = useStorage();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
@@ -25,6 +25,7 @@ export const DocsPage: React.FC = () => {
   const [fileURL, setFileURL] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Get profiles with files, filtered by brand
   const profilesWithFiles = useMemo(() => {
@@ -68,6 +69,43 @@ export const DocsPage: React.FC = () => {
       alert('Failed to load file');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDeleteFile = async () => {
+    if (!selectedProfile || !selectedFile) return;
+    
+    if (!confirm('이 파일을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      // Delete from storage
+      await deleteFile(selectedFile);
+
+      // Update profile in Firestore
+      const updatedFiles = selectedProfile.contractFiles?.filter(
+        (f) => f.filePath !== selectedFile
+      ) || [];
+
+      const documentId = `${selectedProfile.brand}_${selectedProfile.tiktokId}`;
+      await updateProfile(documentId, { contractFiles: updatedFiles });
+
+      // Update local state
+      setSelectedProfile({
+        ...selectedProfile,
+        contractFiles: updatedFiles,
+      });
+      setSelectedFile('');
+      setFileURL(null);
+
+      alert('파일이 삭제되었습니다.');
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      alert('파일 삭제에 실패했습니다.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -189,23 +227,37 @@ export const DocsPage: React.FC = () => {
           size="4xl"
         >
           <div className="space-y-4">
-            {/* File Dropdown */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Select File
-              </label>
-              <select
-                value={selectedFile}
-                onChange={(e) => handleFileSelect(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              >
-                <option value="">-- Select a file --</option>
-                {selectedProfile.contractFiles?.map((file) => (
-                  <option key={file.filePath} value={file.filePath}>
-                    {file.fileName} ({new Date(file.uploadedAt).toLocaleDateString()})
-                  </option>
-                ))}
-              </select>
+            {/* File Dropdown with Delete Button */}
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Select File
+                </label>
+                <select
+                  value={selectedFile}
+                  onChange={(e) => handleFileSelect(e.target.value)}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                >
+                  <option value="">-- Select a file --</option>
+                  {selectedProfile.contractFiles?.map((file) => (
+                    <option key={file.filePath} value={file.filePath}>
+                      {file.fileName} ({new Date(file.uploadedAt).toLocaleDateString()})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {selectedFile && (
+                <div className="flex items-end">
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={handleDeleteFile}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? '삭제 중...' : '파일 삭제'}
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* File Viewer */}

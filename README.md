@@ -1,8 +1,39 @@
-# TikTok Video Management Dashboard
+# eoeo workspace
 
-A comprehensive web application for managing TikTok creator partnerships, video tracking, payments, and shipping logistics. Built with React, TypeScript, and Firebase.
+크리에이터 협업 관리 플랫폼 - A comprehensive web application for managing creator partnerships, video tracking, payments, and seeding campaigns. Built with React, TypeScript, and Firebase.
 
-## 🎯 Features
+## 🔄 Auto-Backup System
+
+이 시스템은 **자동 백업 기능**을 내장하고 있습니다:
+- ⏰ 1시간마다 자동 백업
+- 📦 최대 7일간 백업 보관
+- 🗑️ 7일 이상 된 백업 자동 삭제
+- 💾 모든 데이터는 브라우저 localStorage에 안전하게 저장됩니다
+
+백업 관리 함수 (브라우저 콘솔에서 사용):
+```javascript
+// 백업 목록 확인
+listBackups()
+
+// 백업 통계
+getBackupStats()
+
+// 특정 백업으로 복원
+restoreBackup('eoeo_backup_1234567890')
+```
+
+## � 알림이 안 오나요?
+
+**[WHY_NO_NOTIFICATIONS.md](./WHY_NO_NOTIFICATIONS.md)** - 알림 문제 해결 가이드
+- 30초 자동 진단 스크립트
+- 가장 흔한 원인 3가지와 해결법
+- LocalStorage 직접 수정 방법
+
+**디버깅 도구:**
+- `debug-invitations.html` - 시각적 디버깅 도구 (브라우저에서 열기)
+- `diagnose-invitations.js` - 자동 진단 스크립트 (콘솔에 붙여넣기)
+
+## �🎯 Features
 
 ### Core Functionality
 - **Multi-Brand Support**: Manage multiple brands with isolated data views

@@ -601,7 +601,7 @@ export const ProfilesPage: React.FC = () => {
           const fileCount = profile.contractFiles?.length || 0;
 
           return (
-            <div>
+            <div className="flex items-center gap-2">
               <label className="cursor-pointer">
                 <span className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium rounded-md bg-cyan-600 text-white hover:bg-cyan-700 transition-colors">
                   {isUploading ? 'Uploading...' : fileCount > 0 ? 'Add More' : 'Upload'}
@@ -614,6 +614,11 @@ export const ProfilesPage: React.FC = () => {
                   disabled={isUploading}
                 />
               </label>
+              {fileCount > 0 && (
+                <span className="text-sm text-cyan-400 font-semibold">
+                  {fileCount}개
+                </span>
+              )}
             </div>
           );
         },
