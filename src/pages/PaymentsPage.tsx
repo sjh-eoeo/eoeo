@@ -68,7 +68,7 @@ export const PaymentsPage: React.FC = () => {
   const handleAddPayment = async (data: {
     amount: number;
     paymentDate: string;
-    invoiceFile: File | null;
+    invoiceFiles: File[];
   }) => {
     if (!selectedProfile) return;
 
@@ -77,13 +77,26 @@ export const PaymentsPage: React.FC = () => {
     try {
       let invoiceFileName: string | undefined;
       let invoiceFilePath: string | undefined;
+      const invoiceFiles: Array<{ fileName: string; filePath: string; uploadedAt: string }> = [];
 
-      // Upload invoice if provided
-      if (data.invoiceFile && selectedBrand) {
-        const path = `${selectedBrand}/invoices/${selectedProfile.tiktokId}/${Date.now()}-${data.invoiceFile.name}`;
-        const result = await uploadFile(path, data.invoiceFile);
-        invoiceFileName = result.fileName;
-        invoiceFilePath = result.filePath;
+      // Upload multiple invoices if provided
+      if (data.invoiceFiles.length > 0 && selectedBrand) {
+        for (const file of data.invoiceFiles) {
+          const path = `${selectedBrand}/invoices/${selectedProfile.tiktokId}/${Date.now()}-${file.name}`;
+          const result = await uploadFile(path, file);
+          
+          invoiceFiles.push({
+            fileName: result.fileName,
+            filePath: result.filePath,
+            uploadedAt: new Date().toISOString(),
+          });
+
+          // Keep backward compatibility - use first file for old fields
+          if (!invoiceFileName) {
+            invoiceFileName = result.fileName;
+            invoiceFilePath = result.filePath;
+          }
+        }
       }
 
       // Add payment document
@@ -94,6 +107,7 @@ export const PaymentsPage: React.FC = () => {
         paymentDate: data.paymentDate,
         invoiceFileName,
         invoiceFilePath,
+        invoiceFiles: invoiceFiles.length > 0 ? invoiceFiles : undefined,
       });
 
       // Close modal

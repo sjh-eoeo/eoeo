@@ -9,9 +9,15 @@
  * - PATCH: 버그 수정
  */
 
-export const VERSION = '2.0.8';
+export const VERSION = '2.0.9';
 export const BUILD_DATE = '2025-01-10';
 export const RELEASE_NOTES = {
+  '2.0.9': [
+    '📎 Add Payment 모달 - 여러 인보이스 파일 업로드 지원',
+    '✨ 한 번에 여러 파일 선택 및 업로드 가능',
+    '🗑️ 개별 파일 제거 기능 추가',
+    '💾 Firebase Storage에 모든 파일 저장',
+  ],
   '2.0.8': [
     '🔧 Payments Due 브랜드 필터링 강화',
     '✅ 결제 내역, 비디오 카운트, 프로필 모두 브랜드별로 정확히 필터링',

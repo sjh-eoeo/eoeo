@@ -11,7 +11,7 @@ interface PaymentFormProps {
   onSubmit: (data: {
     amount: number;
     paymentDate: string;
-    invoiceFile: File | null;
+    invoiceFiles: File[];
   }) => Promise<void>;
 }
 
@@ -23,7 +23,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
 }) => {
   const [amount, setAmount] = useState(String(suggestedAmount));
   const [paymentDate, setPaymentDate] = useState(toISODateString());
-  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
+  const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -48,7 +48,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
       await onSubmit({
         amount: parsedAmount,
         paymentDate,
-        invoiceFile,
+        invoiceFiles,
       });
     } catch (error) {
       console.error('Error submitting payment:', error);
@@ -97,20 +97,40 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
 
       <div>
         <label className="block text-sm font-medium text-gray-300 mb-2">
-          Invoice Attachment (Optional)
+          Invoice Attachments (Optional, Multiple)
         </label>
         <input
           type="file"
-          onChange={(e) =>
-            setInvoiceFile(e.target.files ? e.target.files[0] : null)
-          }
+          multiple
+          onChange={(e) => {
+            const files = e.target.files;
+            if (files) {
+              setInvoiceFiles(Array.from(files));
+            }
+          }}
           accept=".pdf,.jpg,.jpeg,.png"
           className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-cyan-600 file:text-white hover:file:bg-cyan-700"
         />
-        {invoiceFile && (
-          <p className="mt-2 text-xs text-gray-400">
-            Selected: {invoiceFile.name}
-          </p>
+        {invoiceFiles.length > 0 && (
+          <div className="mt-2 space-y-1">
+            <p className="text-xs text-gray-400 font-medium">
+              Selected {invoiceFiles.length} file(s):
+            </p>
+            {invoiceFiles.map((file, index) => (
+              <div key={index} className="flex items-center justify-between bg-gray-700/50 px-3 py-2 rounded">
+                <p className="text-xs text-gray-300">{file.name}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInvoiceFiles(invoiceFiles.filter((_, i) => i !== index));
+                  }}
+                  className="text-red-400 hover:text-red-300 text-xs"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

@@ -28,6 +28,12 @@ export interface Payment {
   paymentDate: string;
   invoiceFileName?: string;
   invoiceFilePath?: string;
+  // Multiple invoice files support
+  invoiceFiles?: Array<{
+    fileName: string;
+    filePath: string;
+    uploadedAt: string;
+  }>;
 }
 
 export type PaymentCycle = 'weekly' | 'bi-weekly' | 'monthly';
