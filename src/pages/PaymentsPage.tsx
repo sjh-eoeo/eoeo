@@ -38,7 +38,7 @@ export const PaymentsPage: React.FC = () => {
 
   // Calculate payment data
   const { paymentsByProfile, videoCountsByProfile, dueProfiles } =
-    usePaymentCalculation(profiles, payments, videos);
+    usePaymentCalculation(profiles, payments, videos, selectedBrand);
 
   // Filter due profiles by search
   const filteredDueProfiles = useMemo(() => {

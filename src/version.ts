@@ -9,9 +9,22 @@
  * - PATCH: 버그 수정
  */
 
-export const VERSION = '2.0.6';
-export const BUILD_DATE = '2025-01-07';
+export const VERSION = '2.0.8';
+export const BUILD_DATE = '2025-01-10';
 export const RELEASE_NOTES = {
+  '2.0.8': [
+    '🔧 Payments Due 브랜드 필터링 강화',
+    '✅ 결제 내역, 비디오 카운트, 프로필 모두 브랜드별로 정확히 필터링',
+    '🎯 선택된 브랜드의 데이터만 표시되도록 3단계 필터링 적용',
+  ],
+  '2.0.7': [
+    '👥 AdminPage에 pending 사용자 전용 테이블 추가',
+    '✅ "새로 가입 신청" 섹션으로 가입자 쉽게 확인',
+    '🔘 승인/거절 버튼으로 빠른 사용자 관리',
+    '📊 등록된 사용자와 가입 신청 분리',
+    '🔧 Profiles 페이지 TikTok Username 변경 시 document ID 처리 개선',
+    '🗑️ Creators 상세 모달에서 중복된 이름 수정 기능 제거',
+  ],
   '2.0.6': [
     '✅ 새 사용자 자동 등록 기능 추가',
     '🔐 Firestore 규칙 수정 - 사용자가 자신의 계정 생성 가능',

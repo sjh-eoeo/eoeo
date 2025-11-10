@@ -38,33 +38,51 @@ export function getNextPaymentDate(
 export function usePaymentCalculation(
   profiles: Profile[],
   payments: Payment[],
-  videos: { tiktokId: string }[]
+  videos: { tiktokId: string }[],
+  selectedBrand?: string | null
 ) {
-  // Group payments by profile
+  // Group payments by profile (filtered by brand if selected)
   const paymentsByProfile = useMemo(() => {
     const map = new Map<string, Payment[]>();
-    payments.forEach((p) => {
+    const filteredPayments = selectedBrand
+      ? payments.filter((p) => p.brand === selectedBrand)
+      : payments;
+    
+    filteredPayments.forEach((p) => {
       if (!map.has(p.tiktokId)) map.set(p.tiktokId, []);
       map.get(p.tiktokId)!.push(p);
     });
     return map;
-  }, [payments]);
+  }, [payments, selectedBrand]);
 
-  // Count videos by profile
+  // Count videos by profile (filtered by brand if selected)
   const videoCountsByProfile = useMemo(() => {
     const counts = new Map<string, number>();
-    videos.forEach((video) => {
+    const filteredVideos = selectedBrand
+      ? videos.filter((v) => {
+          // Find the profile to check its brand
+          const profile = profiles.find((p) => p.tiktokId === v.tiktokId);
+          return profile && profile.brand === selectedBrand;
+        })
+      : videos;
+    
+    filteredVideos.forEach((video) => {
       counts.set(video.tiktokId, (counts.get(video.tiktokId) || 0) + 1);
     });
     return counts;
-  }, [videos]);
+  }, [videos, selectedBrand, profiles]);
 
   // Calculate due profiles
   const dueProfiles = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    return profiles
+    // Filter profiles by selected brand first
+    const filteredProfiles = selectedBrand
+      ? profiles.filter((p) => p.brand === selectedBrand)
+      : profiles;
+
+    return filteredProfiles
       .map((profile) => {
         const profilePayments = paymentsByProfile.get(profile.tiktokId) || [];
         const paymentCount = profilePayments.length;
@@ -113,7 +131,7 @@ export function usePaymentCalculation(
           : null;
       })
       .filter((p): p is NonNullable<typeof p> => p !== null);
-  }, [profiles, paymentsByProfile, videoCountsByProfile]);
+  }, [profiles, paymentsByProfile, videoCountsByProfile, selectedBrand]);
 
   return {
     paymentsByProfile,
