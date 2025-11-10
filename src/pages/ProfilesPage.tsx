@@ -23,7 +23,7 @@ export const ProfilesPage: React.FC = () => {
   const { payments } = usePaymentStore();
   const { selectedBrand } = useBrandStore();
   const { appUser } = useAuthStore();
-  const { updateDocument, batchDeleteDocuments } = useFirestore();
+  const { updateDocument, batchDeleteDocuments, setDocument, deleteDocument } = useFirestore();
   const { uploadFile, getFileURL } = useStorage();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -203,6 +203,7 @@ export const ProfilesPage: React.FC = () => {
     onSuccess: () => void;
     onCancel: () => void;
   }> = ({ profile, onSuccess, onCancel }) => {
+    const [tiktokId, setTiktokId] = useState(profile.tiktokId);
     const [startDate, setStartDate] = useState(profile.startDate);
     const [paymentMethod, setPaymentMethod] = useState<'bank-transfer' | 'paypal'>(
       profile.paymentMethod || 'bank-transfer'
@@ -243,12 +244,32 @@ export const ProfilesPage: React.FC = () => {
       }
 
       try {
-        const documentId = `${profile.brand}_${profile.tiktokId}`;
-        await updateDocument('profiles', documentId, {
-          startDate,
-          paymentMethod,
-          paymentInfo: paymentInfoText,
-        });
+        const oldDocumentId = `${profile.brand}_${profile.tiktokId}`;
+        const newDocumentId = `${profile.brand}_${tiktokId}`;
+        
+        // If tiktokId changed, we need to delete old document and create new one
+        if (oldDocumentId !== newDocumentId) {
+          // Create new document with updated data
+          const updatedProfile = {
+            ...profile,
+            tiktokId,
+            startDate,
+            paymentMethod,
+            paymentInfo: paymentInfoText,
+          };
+          await setDocument('profiles', newDocumentId, updatedProfile);
+          
+          // Delete old document
+          await deleteDocument('profiles', oldDocumentId);
+        } else {
+          // Just update if tiktokId didn't change
+          await updateDocument('profiles', oldDocumentId, {
+            startDate,
+            paymentMethod,
+            paymentInfo: paymentInfoText,
+          });
+        }
+        
         onSuccess();
       } catch (error) {
         console.error('Error updating profile:', error);
@@ -259,6 +280,20 @@ export const ProfilesPage: React.FC = () => {
     return (
       <form onSubmit={handleSubmit} className="space-y-6 p-2">
         <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              TikTok Username
+            </label>
+            <input
+              type="text"
+              value={tiktokId}
+              onChange={(e) => setTiktokId(e.target.value)}
+              required
+              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+              placeholder="Enter TikTok username"
+            />
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Start Date

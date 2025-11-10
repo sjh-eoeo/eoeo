@@ -32,19 +32,6 @@ export const AdminPage: React.FC = () => {
 
   useRealtimeCollection<AppUser>('users', setUsers);
 
-  // Separate pending and registered users
-  const pendingUsers = useMemo(() => {
-    return users
-      .filter(user => user.status === 'pending')
-      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-  }, [users]);
-
-  const registeredUsers = useMemo(() => {
-    return users
-      .filter(user => user.status !== 'pending')
-      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-  }, [users]);
-
   const systemStats = useMemo(() => {
     const totalViews = videos.reduce((acc, v) => acc + (v.views || 0), 0);
     const totalLikes = videos.reduce((acc, v) => acc + (v.likes || 0), 0);
@@ -149,29 +136,6 @@ export const AdminPage: React.FC = () => {
     }
   };
 
-  // Handle user approval (for pending users)
-  const handleApprove = async (uid: string) => {
-    try {
-      await updateDocument('users', uid, { status: 'approved' });
-      alert('사용자가 승인되었습니다.');
-    } catch (error) {
-      console.error('Failed to approve user:', error);
-      alert('사용자 승인에 실패했습니다.');
-    }
-  };
-
-  // Handle user rejection (for pending users)
-  const handleReject = async (uid: string) => {
-    if (!confirm('이 사용자를 거절하시겠습니까?')) return;
-    try {
-      await updateDocument('users', uid, { status: 'rejected' });
-      alert('사용자가 거절되었습니다.');
-    } catch (error) {
-      console.error('Failed to reject user:', error);
-      alert('사용자 거절에 실패했습니다.');
-    }
-  };
-
   // Handle user role update
   const handleRoleChange = async (uid: string, newRole: UserRole) => {
     try {
@@ -181,47 +145,6 @@ export const AdminPage: React.FC = () => {
       alert('Failed to update user role');
     }
   };
-
-  // Pending users table columns
-  const pendingColumns = [
-    columnHelper.accessor('email', {
-      header: 'Email',
-      cell: (info) => (
-        <div className="text-sm text-white">{info.getValue() || 'N/A'}</div>
-      ),
-    }),
-    columnHelper.accessor('uid', {
-      header: 'User ID',
-      cell: (info) => (
-        <div className="text-xs text-gray-400 font-mono">{info.getValue()}</div>
-      ),
-    }),
-    columnHelper.display({
-      id: 'actions',
-      header: 'Actions',
-      cell: (info) => {
-        const user = info.row.original;
-        return (
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={() => handleApprove(user.uid)}
-            >
-              승인
-            </Button>
-            <Button
-              size="sm"
-              variant="danger"
-              onClick={() => handleReject(user.uid)}
-            >
-              거절
-            </Button>
-          </div>
-        );
-      },
-    }),
-  ];
 
   // User management table columns
   const userColumns = [
@@ -276,14 +199,8 @@ export const AdminPage: React.FC = () => {
   ];
 
   const userTable = useReactTable({
-    data: registeredUsers,
+    data: users,
     columns: userColumns,
-    getCoreRowModel: getCoreRowModel(),
-  });
-
-  const pendingTable = useReactTable({
-    data: pendingUsers,
-    columns: pendingColumns,
     getCoreRowModel: getCoreRowModel(),
   });
 
@@ -325,28 +242,10 @@ export const AdminPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Pending Users (New Signups) */}
-      {pendingUsers.length > 0 && (
-        <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6">
-          <h3 className="text-xl font-semibold text-white mb-4">
-            새로 가입 신청 ({pendingUsers.length})
-          </h3>
-          <p className="text-sm text-gray-400 mb-4">
-            승인 대기 중인 사용자들입니다. 승인하면 시스템에 접근할 수 있습니다.
-          </p>
-          <div className="bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
-            <DataTable
-              table={pendingTable}
-              emptyMessage="No pending users."
-            />
-          </div>
-        </div>
-      )}
-
       {/* User Management */}
       <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6">
         <h3 className="text-xl font-semibold text-white mb-4">
-          등록된 사용자 ({registeredUsers.length})
+          User Management
         </h3>
         <p className="text-sm text-gray-400 mb-4">
           Manage user access and permissions. Users with "Approved" status can access the system.
